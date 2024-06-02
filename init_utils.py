@@ -27,6 +27,7 @@ def base_parse_args(parser):
     parser.add_argument('--save_freq', default=999, type=int, help='checkpoint saving frequency')
 
     parser.add_argument('--data', default='cifar100', type=str, help='dataset (cifar10, cifar100)')
+    parser.add_argument('--data_path', default='../data', type=str, help='dataset path')
     parser.add_argument('--bs', default=256, type=int, help='batch size')
     parser.add_argument('--mnbs', default=32, type=int, help='mini batch size')
     parser.add_argument('--model', default = 'vit_small_patch16_224', type=str, help='trained model')
@@ -72,12 +73,12 @@ def task_init(args):
     model = None
     if args.data == 'cifar10':
         num_classes = 10
-        train_dl, test_dl = generate_Cifar(args.mnbs, args.data, args.model, '../data')
+        train_dl, test_dl = generate_Cifar(args.mnbs, args.data, args.model, args.data_path)
         sample_size = 50000
     elif args.data == 'cifar100':
         num_classes = 100
         # model = timm.create_model(args.model, pretrained=args.pretrained, num_classes = 100)
-        train_dl, test_dl = generate_Cifar(args.mnbs, args.data, args.model, '../data')
+        train_dl, test_dl = generate_Cifar(args.mnbs, args.data, args.model, args.data_path)
         sample_size = 50000
     elif args.data == 'imgnet1k':
         num_classes = 1000
@@ -85,7 +86,7 @@ def task_init(args):
         sample_size = len(train_dl.dataset)
     elif args.data == 'mnist':
         model = LinearModel(28*28, 10)
-        train_dl, test_dl = generate_Mnist(args.mnbs, '../data')
+        train_dl, test_dl = generate_Mnist(args.mnbs, args.data_path)
         sample_size = 60000
     if model is None:
         if args.model != 'cnn5':
@@ -115,7 +116,7 @@ def nlp_task_init(args):
     else:
         args.clipping_fn = 'Abadi'
     model = None
-    train_dl, test_dl, tokenizer, label_to_id, num_labels = generate_glue(args.data, batch_size=args.mnbs)
+    train_dl, test_dl, tokenizer, label_to_id, num_labels = generate_glue(args.data, data_path=args.data_path, batch_size=args.mnbs)
     model = create_roberta(label_to_id, num_labels)
     model = ModuleValidator.fix(model)
     model.to(device)
