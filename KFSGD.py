@@ -2,22 +2,33 @@ import torch
 from torch.optim.optimizer import Optimizer, required
 import torch.autograd as ta
 
-# def KF_prestep(model, closure):
-#     loss = closure()
-#     loss.backward()
-#     for param in model.parameters():
-#         # perturb
-#         if hasattr(param,'grad'):
-#             param.orig_grad=param.grad.clone()
-#             param.orig_data=param.data.clone()
-#             if hasattr(param, 'dt'):
-#                 param.data = 
-
-
-
 class KFOptimizer(Optimizer):
-    def __init__(self, params, optimizer, sigma_q=0, sigma_p=0):
-        defaults = dict(sigma_q=sigma_q, sigma_p=sigma_p)
+    '''
+        optimizer = KFOptimizer(model.parameters(), optimizer, sigma_H, sigma_g)
+        def train(model, train_dl, optimizer, criterion, device = 'cpu', acc_step = 1, lr_scheduler = None):
+            model.to(device)
+            model.train()
+            for t, (input, label) in enumerate(train_dl):
+                input = input.to(device)
+                label = label.to(device)
+                def closure():
+                    optimizer.zero_grad()
+                    predict = model(input)
+                    if not isinstance(predict, torch.Tensor):
+                        predict = predict.logits
+                    loss = criterion(predict, label)
+                    loss.backward()
+                    return loss, predict
+                loss, predict = optimizer.finite_difference(closure)
+
+                if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
+                    if lr_scheduler is not None:
+                        lr_scheduler.step()
+                    optimizer.step()
+                    optimizer.zero_grad()
+    '''
+    def __init__(self, params, optimizer, sigma_H=0, sigma_g=0):
+        defaults = dict(sigma_H=sigma_H, sigma_g=sigma_g)
         self.optimizer = optimizer
         # if nesterov and (momentum <= 0 or dampening != 0):
             # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
@@ -65,16 +76,16 @@ class KFOptimizer(Optimizer):
         # loss.backward()
         first_loss = loss.clone().detach()
         for group in self.param_groups:
-            sigma_p = group['sigma_p']
-            sigma_q = group['sigma_q']
+            sigma_g = group['sigma_g']
+            sigma_H = group['sigma_H']
             for p in group['params']:
                 if p.grad is None:
                     continue
                 if 'kf_beta_t' not in self.state[p]:
                     self.state[p]['kf_beta_t'] = 1
                     self.state[p]['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
-                beta_t = self.state[p]['kf_beta_t'] + sigma_q**2
-                k_t = beta_t/(beta_t + sigma_p**2 - sigma_q**2 )
+                beta_t = self.state[p]['kf_beta_t'] + sigma_H**2
+                k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2 )
                 k_1 = (1-k_t)/k_t
                 self.state[p]['kf_g_t'] = p.grad.clone().to(p.data)
                 p.data.add_(self.state[p]['d_t'], alpha = -k_1)
@@ -82,13 +93,13 @@ class KFOptimizer(Optimizer):
         loss = closure()
         # loss.backward()
         for group in self.param_groups:
-            sigma_p = group['sigma_p']
-            sigma_q = group['sigma_q']
+            sigma_g = group['sigma_g']
+            sigma_H = group['sigma_H']
             for p in group['params']:
                 if p.grad is None:
                     continue
-                beta_t = self.state[p]['kf_beta_t'] + sigma_q**2
-                k_t = beta_t/(beta_t + sigma_p**2 - sigma_q**2)
+                beta_t = self.state[p]['kf_beta_t'] + sigma_H**2
+                k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2)
                 k_1 = (1-k_t)/k_t
                 
                 p.data.add_(self.state[p]['d_t'], alpha = k_1)
@@ -107,13 +118,13 @@ class KFOptimizer(Optimizer):
         #     loss = closure()
 
         for group in self.param_groups:
-            sigma_p = group['sigma_p']
-            sigma_q = group['sigma_q']
+            sigma_g = group['sigma_g']
+            sigma_H = group['sigma_H']
             for p in group['params']:
                 if p.grad is None:
                     continue
-                beta_t = self.state[p]['kf_beta_t'] + sigma_q**2
-                k_t = beta_t/(beta_t + sigma_p**2 - sigma_q**2)
+                beta_t = self.state[p]['kf_beta_t'] + sigma_H**2
+                k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2)
                 self.state[p]['kf_beta_t'] = (1-k_t)*beta_t
                 p.grad = self.state[p]['kf_m_t'].clone().to(p.data)
                 self.state[p]['kf_d_t'] = -p.data.clone().to(p.data)
