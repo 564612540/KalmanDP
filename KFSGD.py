@@ -60,9 +60,9 @@ class KFOptimizer(Optimizer):
                     self.state[p]['Hd_t'].add_(Hd.pop(0))
         return Hd
 
-    def finite_difference(self, closure):
+    def finite_difference(self, closure = required):
         loss = closure()
-        loss.backward()
+        # loss.backward()
         first_loss = loss.clone().detach()
         for group in self.param_groups:
             sigma_p = group['sigma_p']
@@ -78,9 +78,9 @@ class KFOptimizer(Optimizer):
                 k_1 = (1-k_t)/k_t
                 self.state[p]['kf_g_t'] = p.grad.clone().to(p.data)
                 p.data.add_(self.state[p]['d_t'], alpha = -k_1)
-        self.zero_grad()
+        # self.zero_grad()
         loss = closure()
-        loss.backward()
+        # loss.backward()
         for group in self.param_groups:
             sigma_p = group['sigma_p']
             sigma_q = group['sigma_q']
