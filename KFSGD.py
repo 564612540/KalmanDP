@@ -2,18 +2,31 @@ import torch
 from torch.optim.optimizer import Optimizer, required
 import torch.autograd as ta
 
-class KFSGD(Optimizer):
-    def __init__(self, params, lr=required, weight_decay=0, sigma_q=0, sigma_p=0):
-        defaults = dict(lr=lr,
-                        weight_decay=weight_decay, sigma_q=sigma_q, sigma_p=sigma_p)
+# def KF_prestep(model, closure):
+#     loss = closure()
+#     loss.backward()
+#     for param in model.parameters():
+#         # perturb
+#         if hasattr(param,'grad'):
+#             param.orig_grad=param.grad.clone()
+#             param.orig_data=param.data.clone()
+#             if hasattr(param, 'dt'):
+#                 param.data = 
+
+
+
+class KFOptimizer(Optimizer):
+    def __init__(self, params, optimizer, sigma_q=0, sigma_p=0):
+        defaults = dict(sigma_q=sigma_q, sigma_p=sigma_p)
+        self.optimizer = optimizer
         # if nesterov and (momentum <= 0 or dampening != 0):
             # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
-        super(KFSGD, self).__init__(params, defaults)
+        super(KFOptimizer, self).__init__(params, defaults)
 
     def __setstate__(self, state):
-        super(KFSGD, self).__setstate__(state)
+        super(KFOptimizer, self).__setstate__(state)
 
-    def hessian_d_product(self, closure=None):
+    def hessian_d_product(self):
         """
         evaluate hessian vector product
         """
@@ -47,6 +60,41 @@ class KFSGD(Optimizer):
                     self.state[p]['Hd_t'].add_(Hd.pop(0))
         return Hd
 
+    def finite_difference(self, closure):
+        loss = closure()
+        loss.backward()
+        first_loss = loss.clone().detach()
+        for group in self.param_groups:
+            sigma_p = group['sigma_p']
+            sigma_q = group['sigma_q']
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                if 'kf_beta_t' not in self.state[p]:
+                    self.state[p]['kf_beta_t'] = 1
+                    self.state[p]['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
+                beta_t = self.state[p]['kf_beta_t'] + sigma_q**2
+                k_t = beta_t/(beta_t + sigma_p**2 - sigma_q**2 )
+                k_1 = (1-k_t)/k_t
+                self.state[p]['kf_g_t'] = p.grad.clone().to(p.data)
+                p.data.add_(self.state[p]['d_t'], alpha = -k_1)
+        self.zero_grad()
+        loss = closure()
+        loss.backward()
+        for group in self.param_groups:
+            sigma_p = group['sigma_p']
+            sigma_q = group['sigma_q']
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                beta_t = self.state[p]['kf_beta_t'] + sigma_q**2
+                k_t = beta_t/(beta_t + sigma_p**2 - sigma_q**2)
+                k_1 = (1-k_t)/k_t
+                
+                p.data.add_(self.state[p]['d_t'], alpha = k_1)
+                self.state[p]['kf_m_t'].lerp_(p.grad, weight = self.state[p]['k_t'])
+                self.state[p]['kf_g_t'] = None
+        return first_loss
 
     def step(self, closure=None):
         """Performs a single optimization step.
@@ -54,78 +102,25 @@ class KFSGD(Optimizer):
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.
         """
-        loss = None
-        if closure is not None:
-            loss = closure()
-        
-        printed = False
-        self.hessian_d_product()
+        # loss = None
+        # if closure is not None:
+        #     loss = closure()
 
         for group in self.param_groups:
-            weight_decay = group['weight_decay']
-            # H = group['H']
             sigma_p = group['sigma_p']
             sigma_q = group['sigma_q']
-            g_list = []
-            m_list = []
-            Hd_list = []
-            beta_t = None
-            norm_fact = None
-            # concat as a vector
             for p in group['params']:
                 if p.grad is None:
                     continue
-                if beta_t is None:
-                    if 'beta_t' not in self.state[p]:
-                        self.state[p]['beta_t'] = 1
-                    if 'norm_fact' not in self.state[p]:
-                        self.state[p]['norm_fact'] = 0
-                    beta_t = self.state[p]['beta_t'] + sigma_q**2
-                    norm_fact = self.state[p]['norm_fact']
-                    # H = H.to(p)
-                g_list.append(p.grad.data.view(-1))
-                if 'm_t' not in self.state[p]:
-                    self.state[p]['m_t'] = p.grad.clone().to(p.grad)# torch.zeros_like(p.grad).reshape(-1).to(p.grad) # 
-                m_list.append(self.state[p]['m_t'].view(-1))
-                # if 'd_t' not in self.state[p]:
-                #     self.state[p]['d_t'] = torch.zeros_like(p.grad).to(p.grad)
-                # print(self.state[p]['Hd_t'].size())
-                # print("Manual Hd: ", torch.mm(H, self.state[p]['d_t'].view(-1,1)))
-                Hd_list.append(self.state[p]['Hd_t'].reshape(-1))
-            g_vector = torch.cat(g_list)
-            m_vector = torch.cat(m_list)
-            Hd_vector = torch.cat(Hd_list)
-
-            # prediction
-            m_vector.add_(Hd_vector, alpha=-1)
-            # delta_g = g_vector - m_vector
-            # print("delta_g:", torch.norm(delta_g).item())
-
-            k_t = beta_t/(beta_t + sigma_p**2 - sigma_q**2)
-            if not printed:
-                print(k_t)
-                printed = True
-                
-            # filter
-            m_vector.lerp_(g_vector, k_t)
-            norm_fact = 1 #(1-k_t)*norm_fact + k_t
-            beta_t = (1-k_t)*beta_t
-
-            offset = 0
+                beta_t = self.state[p]['kf_beta_t'] + sigma_q**2
+                k_t = beta_t/(beta_t + sigma_p**2 - sigma_q**2)
+                self.state[p]['kf_beta_t'] = (1-k_t)*beta_t
+                p.grad = self.state[p]['kf_m_t'].clone().to(p.data)
+                self.state[p]['kf_d_t'] = -p.data.clone().to(p.data)
+        loss = self.optimizer.step(closure)
+        for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None:
                     continue
-                if 'beta_t' in self.state[p]:
-                    self.state[p]['beta_t'] = beta_t
-                    self.state[p]['norm_fact'] = norm_fact
-                param_num = torch.numel(p)
-                self.state[p]['m_t'] = m_vector[offset:offset+param_num].view_as(p)
-                offset += param_num
-
-                self.state[p]['d_t'] = p.data.clone().to(p.data)
-                if weight_decay != 0:
-                    p.data.mul_(1 - group['lr'] * weight_decay)
-                p.data.add_(self.state[p]['m_t'], alpha = -group['lr']/norm_fact)
-                self.state[p]['d_t'].add_(p.data, alpha=-1)
-                self.state[p]['Hd_t'] = None
+                self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
         return loss
