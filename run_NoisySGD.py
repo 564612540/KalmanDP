@@ -1,7 +1,7 @@
 import torch
 import math
 # from data_utils import generate_Cifar
-from KFSGD import KFSGD
+from KFSGD import KFOptimizer
 from train_utils import train, noisy_train, test
 from init_utils import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine
@@ -33,7 +33,8 @@ if __name__ == '__main__':
     if args.algo == "sgd":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum = 0)
     elif args.algo == 'kf':
-        optimizer = KFSGD(model.parameters(), lr=args.lr, sigma_p=noise+1.0/args.bs, sigma_q=1.0/args.bs)
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum = 0)
+        optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=noise+1.0/args.bs, sigma_H=1.0/args.bs)
     # elif args.algo == 'adamw':
     #     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     else:

@@ -80,20 +80,17 @@ def noisy_train(model, train_dl, optimizer, criterion, log_file, device = 'cpu',
     correct = 0
     snr = 0
     for t, (input, label) in enumerate(train_dl):
+        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
+            optimizer.prestep()
+        
         input = input.to(device)
         label = label.to(device)
         predict = model(input)
         if not isinstance(predict, torch.Tensor):
             predict = predict.logits
         loss = criterion(predict, label)
-        # 
-        if hasattr(optimizer, 'hessian_d_product'):
-            # print('here')
-            loss.backward(create_graph = True)
-            # optimizer.hessian_d_product()
-        else:
-            loss.backward(create_graph = False)
-        # train_loss = train_loss*0.9 + loss.item()*0.1
+        loss.backward()
+
         train_loss = loss.item()
         _, predicted = predict.max(1)
         total += label.size(0)
