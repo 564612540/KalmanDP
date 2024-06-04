@@ -1,7 +1,7 @@
 import torch
 import math
 # from data_utils import generate_Cifar
-from KFSGD import KFOptimizer
+from KFOptimizer import KFOptimizer
 from train_utils import train, noisy_train, test
 from init_utils import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine
@@ -44,7 +44,10 @@ if __name__ == '__main__':
     # from torch.optim import lr_scheduler
     if args.scheduler:
         from train_utils import CosineAnnealingWarmupRestarts
-        lrscheduler = CosineAnnealingWarmupRestarts(optimizer, max_lr=args.lr, first_cycle_steps= sample_size//args.bs * args.epoch//2, warmup_steps= (sample_size*args.epoch)//(args.bs*20))
+        if args.algo == 'kf':
+            lrscheduler = CosineAnnealingWarmupRestarts(optimizer.optimizer, max_lr=args.lr, first_cycle_steps= sample_size//args.bs * args.epoch, warmup_steps= (sample_size*args.epoch)//(args.bs*20))
+        else:
+            lrscheduler = CosineAnnealingWarmupRestarts(optimizer, max_lr=args.lr, first_cycle_steps= sample_size//args.bs * args.epoch, warmup_steps= (sample_size*args.epoch)//(args.bs*20))
     else:
         lrscheduler = None
     

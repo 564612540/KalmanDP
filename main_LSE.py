@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 from data_utils import generate_quadratic, synthetic
 from optimizer import *
 from LPSGD import LPSGD
-from KFSGD import KFSGD
+from KFOptimizer import KFOptimizer
 import numpy as np
 from tqdm import tqdm
 
@@ -43,8 +43,8 @@ for _ in tqdm(range(test)):
     dataloader = DataLoader(dataset, batch_size= bs, shuffle=False)
     model = linearRegression(dim)
 
-    # optimizer = torch.optim.SGD(model.parameters(), lr = 1/L)
-    optimizer = KFSGD(model.parameters(), lr=1/L, sigma_p=sigma)
+    optimizer = torch.optim.SGD(model.parameters(), lr = 1/L)
+    optimizer = KFOptimizer(model.parameters(), optimizer, sigma_H=1e-5, sigma_g=sigma)
     # optimizer = LPSGD(model.parameters(), lr=1/L, a=[1,-0.9], b=[0.15, -0.05])
 
     init_loss = None
@@ -53,6 +53,7 @@ for _ in tqdm(range(test)):
         model.to(device)
         model.train()
         for x,y in dataloader:
+            optimizer.prestep()
             x = x.to(device)
             y = y.to(device)
             y_pred = model(x)
@@ -62,7 +63,7 @@ for _ in tqdm(range(test)):
                 min_loss = loss.item()
             elif loss.item()<min_loss:
                 min_loss = loss.item()
-            loss.backward(create_graph = True)
+            loss.backward()
             # optimizer.hessian_d_product()
             apply_noise(model.get_params(), dist)
             # optimizer.hessian_d_product()
