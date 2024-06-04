@@ -34,7 +34,7 @@ if __name__ == '__main__':
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum = 0)
     elif args.algo == 'kf':
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum = 0)
-        optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=noise+1.0/args.bs, sigma_H=1.0/args.bs)
+        optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=(noise+1.0)/args.bs, sigma_H=1.0/args.bs)
     # elif args.algo == 'adamw':
     #     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     else:
