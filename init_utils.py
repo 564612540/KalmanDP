@@ -39,6 +39,7 @@ def base_parse_args(parser):
     parser.add_argument('--beta', default=0.999, type=float, help='beta for adam')
     parser.add_argument('--epoch', default=3, type=int,help='number of public epochs')
     parser.add_argument('--scheduler',action="store_true" ,help='use 1 cycle lr scheduler')
+    parser.add_argument('--kf',action="store_true" ,help='use kalman filter')
 
     # DP parameters
     parser.add_argument('--clipping', action="store_true", help="use gradient clipping")

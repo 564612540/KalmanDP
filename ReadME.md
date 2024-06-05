@@ -35,3 +35,15 @@ for data in dataloader:
 ```
 
 The optimizer is compatible with fastDP (works with .grad, and .private_grad)
+
+Example code:
+```sh
+EPS=8
+LR=0.003
+TAG="Adam_CNN_NLR_${LR}_EPS_${EPS}"
+python ./run_KFSGD.py \
+    --tag ${TAG} --log_type file --log_freq 10 \
+    --bs 5000 --mnbs 250 --data cifar10 --data_path ./data \
+    --algo adam --lr ${LR} --epoch 80 --model cnn5 \
+    --clipping --noise -1 --epsilon ${EPS}
+```

@@ -46,8 +46,9 @@ if __name__ == '__main__':
         lrscheduler = CosineAnnealingWarmupRestarts(optimizer, max_lr=args.lr, first_cycle_steps= sample_size//args.bs * args.epoch, warmup_steps= (sample_size*args.epoch)//(args.bs*20))
     else:
         lrscheduler = None
-
-    optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=(noise+1.0)/args.bs, sigma_H=1.0/args.bs)
+        
+    if args.kf:
+        optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=(noise+0.5)/args.bs, sigma_H=0.5/args.bs)
     
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     if args.clipping:

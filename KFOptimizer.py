@@ -66,7 +66,7 @@ class KFOptimizer(Optimizer):
                 beta_t = self.state[p]['kf_beta_t'] + sigma_H**2
                 k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2 )
                 k_1 = (1-k_t)/k_t
-                p.data.add_(self.state[p]['kf_d_t'], alpha = -k_1)
+                p.data.add_(self.state[p]['kf_d_t'], alpha = k_1)
 
     def step(self, closure=None):
         """Performs a single optimization step.
@@ -97,7 +97,7 @@ class KFOptimizer(Optimizer):
                 k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2)
                 k_1 = (1-k_t)/k_t
                 self.state[p]['kf_beta_t'] = (1-k_t)*beta_t
-                p.data.add_(self.state[p]['kf_d_t'], alpha = k_1)
+                p.data.add_(self.state[p]['kf_d_t'], alpha = -k_1)
                 self.state[p]['kf_m_t'].lerp_(grad, weight = k_t)
                 if has_private_grad:
                     p.private_grad = self.state[p]['kf_m_t'].clone().to(p.data)
