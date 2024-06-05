@@ -5,6 +5,7 @@ from KFOptimizer import KFOptimizer
 from train_utils import train, noisy_train, test
 from init_utils import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine
+from AdamBC import AdamBC
 #PrivacyEngine_Distributed_extending,PrivacyEngine_Distributed_Stage_2_and_3
 # from opacus.accountants.utils import get_noise_multiplier
 # from opacus.validators import ModuleValidator
@@ -36,6 +37,8 @@ if __name__ == '__main__':
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     elif args.algo == 'adamw':
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    elif args.algo == 'adambc':
+        optimizer = AdamBC(model.parameters(), lr=args.lr, dp_batch_size=args.bs, dp_l2_norm_clip=1, dp_noise_multiplier=noise, eps_root=1e-8)
     else:
         print(args.algo)
         raise RuntimeError("Unknown Algorithm!")
