@@ -58,13 +58,17 @@ class KFOptimizer2(Optimizer):
                 else:
                     p.grad = self.state[p]['kf_m_t'].clone().to(p.data)
 
-                loss = self.optimizer.step(closure)
+        loss = self.optimizer.step(closure)
 
-                beta_t = self.state[p]['kf_beta_t'] + sigma_H**2 
-                k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2)
-                self.state[p]['kf_beta_t'] = (1-k_t)*beta_t
-
-                p.data.multiply_(1-(1-k_t)/k_t)
-                p.data.add_(p.previous_data, alpha = (1-k_t)/k_t)
+        
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.requires_grad:
+                    beta_t = self.state[p]['kf_beta_t'] + sigma_H**2 
+                    k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2)
+                    self.state[p]['kf_beta_t'] = (1-k_t)*beta_t
+    
+                    p.data.multiply_(1-(1-k_t)/k_t)
+                    p.data.add_(p.previous_data, alpha = (1-k_t)/k_t)
 
         return loss
