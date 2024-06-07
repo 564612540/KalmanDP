@@ -47,8 +47,8 @@ def train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch
     correct = 0
     # print(" ")
     for t, (input, label) in enumerate(train_dl):
-        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
-            optimizer.prestep()
+        # if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
+        #     optimizer.prestep()
         # with torch.autocast(device_type="cuda", dtype=torch.float16):
         input = input.to(device)
         label = label.to(device)
@@ -67,6 +67,7 @@ def train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch
             if lr_scheduler is not None:
                 lr_scheduler.step()
             optimizer.step()
+            optimizer.prestep()
             optimizer.zero_grad()
 
         if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
