@@ -183,7 +183,7 @@ class AdamBC(Optimizer):
             exp_avg_sqs = []  # moving average of priv grad squared
             # exp_avgs_clean = []  # moving average of mean clipped grad
             # exp_avg_sqs_clean = []  # moving average of mean clipped grad squared
-            max_exp_avg_sqs = []
+            # max_exp_avg_sqs = []
             state_steps = []
             beta1, beta2 = group['betas']
             cur_gamma = self.eps_root
@@ -217,7 +217,7 @@ class AdamBC(Optimizer):
                     # exp_avg_sqs_clean.append(state['exp_avg_sq_clean'])
 
                     if group['amsgrad']:
-                        max_exp_avg_sqs.append(state['max_exp_avg_sq'])
+                        # max_exp_avg_sqs.append(state['max_exp_avg_sq'])
                         raise NotImplementedError
 
                     # gamma scheduler
@@ -233,7 +233,7 @@ class AdamBC(Optimizer):
                         grads,
                         exp_avgs,
                         exp_avg_sqs,
-                        max_exp_avg_sqs,
+                        # max_exp_avg_sqs,
                         state_steps,
                         amsgrad=group['amsgrad'],
                         beta1=beta1,

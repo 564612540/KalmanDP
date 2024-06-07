@@ -15,10 +15,10 @@ class KFOptimizer2(Optimizer):
         self.optimizer = optimizer
         # if nesterov and (momentum <= 0 or dampening != 0):
             # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
-        super(KFOptimizer, self).__init__(params, defaults)
+        super(KFOptimizer2, self).__init__(params, defaults)
 
     def __setstate__(self, state):
-        super(KFOptimizer, self).__setstate__(state)
+        super(KFOptimizer2, self).__setstate__(state)
 
     def step(self, closure=None):
         """Performs a single optimization step.
@@ -44,7 +44,7 @@ class KFOptimizer2(Optimizer):
                 else:
                     continue
                 if 'kf_beta_t' not in self.state[p]:
-                    self.state[p]['kf_beta_t'] = 1 #??? #t=0
+                    self.state[p]['kf_beta_t'] = sigma_g**2 #??? #t=0
                     # self.state[p]['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
                     self.state[p]['kf_m_t'] = grad.clone().to(p.data) # t=-1??? not mention in paper
                     beta_t = self.state[p]['kf_beta_t'] + sigma_H**2 
