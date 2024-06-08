@@ -2,7 +2,8 @@ import torch
 import math
 # from data_utils import generate_Cifar
 from KFOptimizer import KFOptimizer
-from train_utils import train, noisy_train, test
+from KFOptimizer2 import KFOptimizer2
+from train_utils import train, noisy_train, test, train_2
 from init_utils import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine
 from AdamBC import AdamBC

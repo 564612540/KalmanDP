@@ -75,6 +75,42 @@ def train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch
             if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
                 log_file.update([epoch, t],[100.*correct/total, train_loss])
 
+def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None):
+    model.to(device)
+    model.train()
+    train_loss = 0
+    total = 0
+    correct = 0
+    # print(" ")
+    for t, (input, label) in enumerate(train_dl):
+        # if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
+        #     optimizer.prestep()
+        # with torch.autocast(device_type="cuda", dtype=torch.float16):
+        input = input.to(device)
+        label = label.to(device)
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss = criterion(predict, label)
+        loss.backward()
+        
+        train_loss = loss.item()
+        _, predicted = predict.max(1)
+        total = total + label.size(0)
+        correct = correct + predicted.eq(label).sum().item()
+
+        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
+            if lr_scheduler is not None:
+                lr_scheduler.step()
+            optimizer.step()
+            # optimizer.prestep()
+            optimizer.zero_grad()
+
+        if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
+            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
+            if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
+                log_file.update([epoch, t],[100.*correct/total, train_loss])
+
 def noisy_train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, noise = 0, log_frequency = -1, acc_step = 1, lr_scheduler = None):
     model.to(device)
     model.train()
