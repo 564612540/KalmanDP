@@ -47,9 +47,9 @@ class KFOptimizer2(Optimizer):
                     self.state[p]['kf_beta_t'] = sigma_g**2 #??? #t=0
                     # self.state[p]['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
                     self.state[p]['kf_m_t'] = grad.clone().to(p.data) # t=-1??? not mention in paper
-                    beta_t = self.state[p]['kf_beta_t'] + sigma_H**2 
-                    k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2) #t=0
-                    self.state[p]['kf_beta_t'] = (1-k_t)*beta_t #t=0
+                beta_t = self.state[p]['kf_beta_t'] + sigma_H**2 
+                k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2) #t=0
+                self.state[p]['kf_beta_t'] = (1-k_t)*beta_t #t=0
                 
                 self.state[p]['kf_m_t'].lerp_(grad, weight = (1-k_t)/k_t) #t>=0
         
@@ -62,16 +62,5 @@ class KFOptimizer2(Optimizer):
             group['lr']=(1-(1-k_t)/k_t)*group_orig['lr']
 
         loss = self.optimizer.step(closure)
-        
-        '''
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.requires_grad:
-                    beta_t = self.state[p]['kf_beta_t'] + sigma_H**2 
-                    k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2)
-                    self.state[p]['kf_beta_t'] = (1-k_t)*beta_t
-    
-                    p.data.multiply_(1-(1-k_t)/k_t)
-                    p.data.add_(p.previous_data, alpha = (1-k_t)/k_t)
-        '''
+
         return loss
