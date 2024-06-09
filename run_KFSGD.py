@@ -63,7 +63,7 @@ if __name__ == '__main__':
         # if args.no_record:
         if use_manual_noise:
             # print('using manual noise')
-            noisy_train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, noise = args.noise, log_frequency = args.log_freq, acc_step = acc_step,lr_scheduler=lrscheduler)
+            noisy_train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, noise = noise, log_frequency = args.log_freq, acc_step = acc_step,lr_scheduler=lrscheduler)
         else:
             train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
         test(model, test_dl, criterion, log_file, device = device, epoch = E)

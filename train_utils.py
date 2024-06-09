@@ -67,7 +67,7 @@ def train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch
             if lr_scheduler is not None:
                 lr_scheduler.step()
             optimizer.step()
-            optimizer.prestep()
+            # optimizer.prestep()
             optimizer.zero_grad()
 
         if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):

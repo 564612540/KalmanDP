@@ -106,10 +106,16 @@ class KFOptimizer(Optimizer):
                 self.state[p]['kf_d_t'] = -p.data.clone().to(p.data)
         loss = self.optimizer.step(closure)
         for group in self.param_groups:
+            sigma_g = group['sigma_g']
+            sigma_H = group['sigma_H']
             for p in group['params']:
                 if p.grad is None:
                     continue
                 self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
+                beta_t = self.state[p]['kf_beta_t'] + sigma_H**2
+                k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2 )
+                k_1 = (1-k_t)/k_t
+                p.data.add_(self.state[p]['kf_d_t'], alpha = k_1)
         return loss
     
 
