@@ -30,7 +30,7 @@ if __name__ == '__main__':
         args.lr = args.lr/acc_step
         print('use manual noise')
     
-    optimizer = KFAdam(model.parameters(), lr=args.lr, beta = 0.995, weight_decay=0, sigma_dp=noise/args.bs)
+    optimizer = KFAdam(model.parameters(), lr=args.lr, betas = (0.9, 0.995), weight_decay=0, sigma_dp=noise/args.bs)
     
     # from torch.optim import lr_scheduler
     if args.scheduler:

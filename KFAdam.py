@@ -3,7 +3,7 @@ from torch.optim.optimizer import Optimizer, required
 import torch.autograd as ta
 
 class KFAdam(Optimizer):
-    def __init__(self, params, lr=required, beta = 0.999, weight_decay = 0, sigma_dp = 0):
+    def __init__(self, params, lr=required, betas = (0.9, 0.999), weight_decay = 0, sigma_dp = 0):
         '''
         # Kalman filter + Adam, with bias correction and variance estimation. 
         # Does not need to tune any parameter except the learning rate
@@ -13,11 +13,11 @@ class KFAdam(Optimizer):
         '''
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
-        if not 0.0 <= beta < 1.0:
-            raise ValueError("Invalid beta parameter: {}".format(beta))
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError("Invalid beta parameter: {}".format(betas[0]))
         if not 0.0 <= weight_decay:
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
-        defaults = dict(lr = lr, beta=beta, weight_decay = weight_decay, sigma_dp=sigma_dp)
+        defaults = dict(lr = lr, betas=betas, weight_decay = weight_decay, sigma_dp=sigma_dp)
         # if nesterov and (momentum <= 0 or dampening != 0):
             # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super(KFAdam, self).__init__(params, defaults)
@@ -28,13 +28,15 @@ class KFAdam(Optimizer):
     def prestep(self):
         for group in self.param_groups:
             sigma_dp = group['sigma_dp']
+            beta1,beta2 = group['betas']
             for p in group['params']:
                 if not p.requires_grad:
                     continue
                 if 'kf_beta_t' not in self.state[p]:
                     continue
                 p_state = self.state[p]
-                beta_t_ = p_state['kf_beta_t'] + p_state['kf_sigma_H_sq']
+                bias_correction_1 = 1 - beta1**p_state['step']
+                beta_t_ = p_state['kf_beta_t'] + p_state['kf_sigma_H_sq'].divide(bias_correction_1)
                 k_t = beta_t_/(beta_t_ + sigma_dp**2)
                 k_1 = (1-k_t)/k_t
                 p.data.add_(self.state[p]['kf_d_t'], alpha = k_1.item())
@@ -54,7 +56,7 @@ class KFAdam(Optimizer):
 
         for group in self.param_groups:
             sigma_dp = group['sigma_dp']
-            beta = group['beta']
+            beta1,beta2 = group['betas']
             lr = group['lr']
             weight_decay = group['weight_decay']
             for p in group['params']:
@@ -74,18 +76,20 @@ class KFAdam(Optimizer):
                     p_state['kf_m_t'] = grad.clone().to(p.data)
                     p_state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
                     p_state['kf_sigma_H_sq'] = 0
-                p_state['step'] += 1
-                bias_correction = 1 - beta**p_state['step']
-                p_state['exp_avg_sq'].mul_(beta).add_(torch.norm(grad).pow(2).div(torch.numel(grad)), alpha= 1-beta)
-                exp_avg_sq_hat = torch.divide(p_state['exp_avg_sq'], bias_correction).subtract(sigma_dp**2).clamp_min(1e-8)
-                g_avg_sq = torch.norm(p_state['kf_m_t']).pow(2).div(torch.numel(grad)).subtract(p_state['kf_beta_t'])
-                p_state['kf_sigma_H_sq'] = exp_avg_sq_hat.subtract(g_avg_sq).clamp_min(1e-8)
-                beta_t_ = p_state['kf_beta_t'] + p_state['kf_sigma_H_sq']
+                bias_correction_1 = 1 - beta1**p_state['step']                
+                beta_t_ = p_state['kf_beta_t'] + p_state['kf_sigma_H_sq'].divide(bias_correction_1)
                 k_t = beta_t_/(beta_t_ + sigma_dp**2)
                 k_1 = (1-k_t)/k_t
                 p_state['kf_beta_t'] = (1-k_t)*beta_t_
 
                 p.data.add_(p_state['kf_d_t'], alpha = -k_1.item())
+                p_state['step'] += 1
+                bias_correction_2 = 1 - beta2**p_state['step']
+                exp_avg_sq_hat = torch.divide(p_state['exp_avg_sq'], bias_correction_2).subtract(sigma_dp**2).clamp_min(1e-8)
+                g_avg_sq = torch.norm(p_state['kf_m_t']).pow(2).div(torch.numel(grad)).subtract(p_state['kf_beta_t'])
+                p_state['exp_avg_sq'].mul_(beta2).add_(torch.norm(grad).pow(2).div(torch.numel(grad)), alpha= 1-beta2)
+                p_state['kf_sigma_H_sq'] = beta1*p_state['kf_sigma_H_sq'] + exp_avg_sq_hat.subtract(g_avg_sq).clamp_min(1e-8).multiply(1-beta1)
+
                 p_state['kf_m_t'].lerp_(grad, weight = k_t)
                 # if has_private_grad:
                 #     p.private_grad = p_state['kf_m_t'].clone().to(p.data)
