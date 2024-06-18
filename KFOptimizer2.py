@@ -48,14 +48,12 @@ class KFOptimizer2(Optimizer):
                 has_private_grad = False
                 if not p.requires_grad:
                     continue
-                else:
-                    p.x_t_minus1=p.data.clone()
+                p.x_t_minus1=p.data.clone()
 
                 if 'kf_beta_t' not in self.state[p]:
                     self.state[p]['kf_beta_t'] = sigma_g**2 #??? #t=0
                     # self.state[p]['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
-                    self.state[p]['kf_m_t'] = torch.zeros_like(p.data).to(p.data)
-
+                    self.state[p]['kf_m_t'] = p.grad_t.clone()#torch.zeros_like(p.data).to(p.data)
                 beta_t = self.state[p]['kf_beta_t'] + sigma_H**2 
                 k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2) #t=0
                 self.state[p]['kf_beta_t'] = (1-k_t)*beta_t #t=0
@@ -69,7 +67,11 @@ class KFOptimizer2(Optimizer):
 
         # for group, group_orig in zip(self.param_groups,self.optimizer.param_groups):
         #     group['lr']=(1-(1-k_t)/k_t)*group_orig['lr']
-
+        # clear grad
+        for p in model.parameters():
+          if p.requires_grad:
+            del p.grad_t, p.grad_t_plus
+            
         loss = self.optimizer.step(closure)
 
         return loss
