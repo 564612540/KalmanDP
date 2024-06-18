@@ -144,10 +144,6 @@ def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epo
             optimizer.step()
             # optimizer.prestep()
             optimizer.zero_grad()
-            # clear grad
-            for p in model.parameters():
-              if p.requires_grad:
-                del p.grad_t, p.grad_t_plus
 
         if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
             print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
