@@ -83,13 +83,8 @@ def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epo
     correct = 0
     # print(" ")
     for t, (input, label) in enumerate(train_dl):
-        if t % acc_step == 0:
-            # optimizer.prestep()
-            for p in model.parameters(): # change to x_t_plus
-                if p.requires_grad:
-                    p.x_t=p.data.clone()
-                    if hasattr(p,'x_t_minus1'):
-                        p.data=(1-gamma)*p.x_t+gamma*p.x_t_minus1
+        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
+            optimizer.prestep()
         # with torch.autocast(device_type="cuda", dtype=torch.float16):
         input = input.to(device)
         label = label.to(device)
