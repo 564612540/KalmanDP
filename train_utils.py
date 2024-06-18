@@ -75,7 +75,7 @@ def train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch
             if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
                 log_file.update([epoch, t],[100.*correct/total, train_loss])
 
-def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None):
+def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None, gamma=0.1):
     model.to(device)
     model.train()
     train_loss = 0
@@ -83,8 +83,13 @@ def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epo
     correct = 0
     # print(" ")
     for t, (input, label) in enumerate(train_dl):
-        # if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
-        #     optimizer.prestep()
+        if t % acc_step == 0:
+            # optimizer.prestep()
+            for p in model.parameters(): # change to x_t_plus
+                if p.requires_grad:
+                    p.x_t=p.data.clone()
+                    if hasattr(p,'x_t_minus1'):
+                        p.data=(1-gamma)*p.x_t+gamma*p.x_t_minus1
         # with torch.autocast(device_type="cuda", dtype=torch.float16):
         input = input.to(device)
         label = label.to(device)
@@ -93,6 +98,32 @@ def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epo
             predict = predict.logits
         loss = criterion(predict, label)
         loss.backward()
+        ### the grad is computed at x_t_plus
+        for p in model.parameters():
+            if p.requires_grad:
+                if not hasattr(p,'grad_t_plus'):
+                    p.grad_t_plus = p.grad
+                else:
+                    p.grad_t_plus += p.grad
+                del p.grad
+        ### change back to x_t
+        for p in model.parameters():
+            if p.requires_grad:
+                p.data=p.x_t.clone()
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss = criterion(predict, label)
+        loss.backward()
+        for p in model.parameters():
+            if p.requires_grad:
+                if not hasattr(p,'grad_t'):
+                    p.grad_t = p.grad
+                else:
+                    p.grad_t += p.grad
+            del p.grad
+        ########
+        
         
         train_loss = loss.item()
         _, predicted = predict.max(1)
