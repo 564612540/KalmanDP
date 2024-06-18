@@ -98,15 +98,16 @@ def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epo
             if p.requires_grad:
                 if not hasattr(p,'grad_t_plus'):
                     if hasattr(p,'private_grad'):
-                        p.grad_t_plus = p.private_grad; del p.private_grad
+                        p.grad_t_plus = p.private_grad; p.private_grad=0
                     else:
                         p.grad_t_plus = p.grad
                 else:
                     if hasattr(p,'private_grad'):
-                        p.grad_t_plus += p.private_grad; del p.private_grad
+                        p.grad_t_plus += p.private_grad; p.private_grad=0
                     else:
                         p.grad_t_plus += p.grad
                 del p.grad
+
         ### change back to x_t
         for p in model.parameters():
             if p.requires_grad:
@@ -120,12 +121,12 @@ def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epo
             if p.requires_grad:
                 if not hasattr(p,'grad_t'):
                     if hasattr(p,'private_grad'):
-                        p.grad_t = p.private_grad; del p.private_grad
+                        p.grad_t = p.private_grad; p.private_grad=0
                     else:
                         p.grad_t = p.grad
                 else:
                     if hasattr(p,'private_grad'):
-                        p.grad_t += p.private_grad; del p.private_grad
+                        p.grad_t += p.private_grad; p.private_grad=0
                     else:
                         p.grad_t += p.grad
                 del p.grad
