@@ -54,10 +54,8 @@ class KFOptimizer2(Optimizer):
                 if 'kf_beta_t' not in self.state[p]:
                     self.state[p]['kf_beta_t'] = sigma_g**2 #??? #t=0
                     # self.state[p]['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
-                    try:
-                        self.state[p]['kf_m_t'] = p.private_grad.clone().to(p.data) # t=-1??? not mention in paper
-                    except:
-                        self.state[p]['kf_m_t'] = p.grad.clone().to(p.data) # t=-1??? not mention in paper
+                    self.state[p]['kf_m_t'] = torch.zeros_like(p.data).to(p.data)
+
                 beta_t = self.state[p]['kf_beta_t'] + sigma_H**2 
                 k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2) #t=0
                 self.state[p]['kf_beta_t'] = (1-k_t)*beta_t #t=0
