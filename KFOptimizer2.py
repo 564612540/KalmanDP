@@ -68,9 +68,10 @@ class KFOptimizer2(Optimizer):
         # for group, group_orig in zip(self.param_groups,self.optimizer.param_groups):
         #     group['lr']=(1-(1-k_t)/k_t)*group_orig['lr']
         # clear grad
-        for p in model.parameters():
-          if p.requires_grad:
-            del p.grad_t, p.grad_t_plus
+        for group in self.param_groups:
+            for p in group['params']:
+              if p.requires_grad:
+                del p.grad_t, p.grad_t_plus
             
         loss = self.optimizer.step(closure)
 
