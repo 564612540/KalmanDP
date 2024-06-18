@@ -60,10 +60,10 @@ class KFOptimizer2(Optimizer):
                 
                 self.state[p]['kf_m_t']=(1-k_t)*self.state[p]['kf_m_t']+(1-k_t)/gamma*p.grad_t_plus+(k_t-(1-k_t)/gamma)*p.grad_t
                 
-                if has_private_grad:
-                    p.private_grad = self.state[p]['kf_m_t'].clone().to(p.data)
-                else:
-                    p.grad = self.state[p]['kf_m_t'].clone().to(p.data)
+                # if has_private_grad:
+                p.private_grad = self.state[p]['kf_m_t'].clone().to(p.data)
+                # else:
+                    # p.grad = self.state[p]['kf_m_t'].clone().to(p.data)
 
         # for group, group_orig in zip(self.param_groups,self.optimizer.param_groups):
         #     group['lr']=(1-(1-k_t)/k_t)*group_orig['lr']
