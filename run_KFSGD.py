@@ -1,9 +1,9 @@
 import torch
 import math
 # from data_utils import generate_Cifar
-from KFOptimizer import KFOptimizer
+from KFOptimizer import KFOptimizer, KFOptimizer3
 from KFOptimizer2 import KFOptimizer2
-from train_utils import train, noisy_train, test, train_2
+from train_utils import train, noisy_train, test, train_2, train3
 from init_utils import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine
 from AdamBC import AdamBC
@@ -52,7 +52,10 @@ if __name__ == '__main__':
         lrscheduler = None
         
     if args.kf:
-        optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=(noise+0.5)/args.bs, sigma_H=0.5/args.bs)
+        if args.gamma == -1:
+            optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=args.kappa, sigma_H=1)
+        else:
+            optimizer = KFOptimizer3(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
     
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     if args.clipping:
@@ -64,8 +67,10 @@ if __name__ == '__main__':
         if use_manual_noise:
             # print('using manual noise')
             noisy_train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, noise = noise, log_frequency = args.log_freq, acc_step = acc_step,lr_scheduler=lrscheduler)
-        else:
+        elif args.gamma == -1:
             train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
+        else:
+            train3(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
         test(model, test_dl, criterion, log_file, device = device, epoch = E)
         
         

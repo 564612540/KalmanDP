@@ -2,7 +2,7 @@ import torch
 import math
 # from data_utils import generate_Cifar
 from KFAdam import KFAdam
-from train_utils import train, noisy_train, test
+from train_utils import train, train_R, noisy_train, test
 from init_utils import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine
 #PrivacyEngine_Distributed_extending,PrivacyEngine_Distributed_Stage_2_and_3
@@ -50,7 +50,10 @@ if __name__ == '__main__':
             # print('using manual noise')
             noisy_train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, noise = noise, log_frequency = args.log_freq, acc_step = acc_step,lr_scheduler=lrscheduler)
         else:
-            train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
+            if args.record:
+                train_R(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
+            else:
+                train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
         test(model, test_dl, criterion, log_file, device = device, epoch = E)
         
         

@@ -40,6 +40,9 @@ def base_parse_args(parser):
     parser.add_argument('--epoch', default=3, type=int,help='number of public epochs')
     parser.add_argument('--scheduler',action="store_true" ,help='use 1 cycle lr scheduler')
     parser.add_argument('--kf',action="store_true" ,help='use kalman filter')
+    parser.add_argument('--record',action="store_true" ,help='record gamma for KFAdamBC')
+    parser.add_argument('--kappa', default=1.5, type=float, help='sigma ratio')
+    parser.add_argument('--gamma', default=-1, type=float, help='perturbation stepsize, default: -1 (dynamic according to k_t)')
 
     # DP parameters
     parser.add_argument('--clipping', action="store_true", help="use gradient clipping")

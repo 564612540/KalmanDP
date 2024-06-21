@@ -3,7 +3,7 @@ from torch.optim.optimizer import Optimizer, required
 import torch.autograd as ta
 
 class KFAdam(Optimizer):
-    def __init__(self, params, lr=required, betas = (0.9, 0.999), weight_decay = 0, sigma_dp = 0):
+    def __init__(self, params, lr=required, betas = (0.9, 0.999), weight_decay = 0, gamma=1e-2, sigma_dp = 0):
         '''
         # Kalman filter + Adam, with bias correction and variance estimation. 
         # Does not need to tune any parameter except the learning rate
@@ -17,7 +17,7 @@ class KFAdam(Optimizer):
             raise ValueError("Invalid beta parameter: {}".format(betas[0]))
         if not 0.0 <= weight_decay:
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
-        defaults = dict(lr = lr, betas=betas, weight_decay = weight_decay, sigma_dp=sigma_dp)
+        defaults = dict(lr = lr, betas=betas, weight_decay = weight_decay, gamma=gamma, sigma_dp=sigma_dp)
         # if nesterov and (momentum <= 0 or dampening != 0):
             # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super(KFAdam, self).__init__(params, defaults)
@@ -25,7 +25,7 @@ class KFAdam(Optimizer):
     def __setstate__(self, state):
         super(KFAdam, self).__setstate__(state)
 
-    def prestep(self):
+    def prestep(self, closure=required):
         for group in self.param_groups:
             sigma_dp = group['sigma_dp']
             beta1,beta2 = group['betas']
@@ -54,7 +54,6 @@ class KFAdam(Optimizer):
         if closure is not None:
             with torch.enable_grad():
                 loss = closure()
-        gammas = []
 
 
         for group in self.param_groups:
@@ -87,7 +86,6 @@ class KFAdam(Optimizer):
                 p_state['kf_beta_t'] = (1-k_t)*beta_t_
                 if isinstance(gamma, torch.Tensor):
                     gamma = gamma.item()
-                gammas.append(gamma)
 
                 p.data.add_(p_state['kf_d_t'], alpha = -gamma)
                 bias_correction_2 = 1 - beta2**p_state['step']
@@ -110,6 +108,5 @@ class KFAdam(Optimizer):
                 p.data.add_(p_state['kf_m_t'], alpha = -lr/(exp_avg_sq_hat.sqrt().item()))
 
                 p_state['kf_d_t'].add_(p.data, alpha = 1)
-        # print(gammas)
-        return gammas, loss
+        return loss
     
