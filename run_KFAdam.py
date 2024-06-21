@@ -2,6 +2,7 @@ import torch
 import math
 # from data_utils import generate_Cifar
 from KFAdam import KFAdam
+from KFAdam2 import KFAdam2
 from train_utils import train, train_R, noisy_train, test
 from init_utils import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine

@@ -115,6 +115,7 @@ class KFOptimizer(Optimizer):
             for p in group['params']:
                 if not p.requires_grad:
                     continue
+                state = self.state[p]
                 state['kf_d_t'].add_(p.data, alpha = 1)
                 # beta_t = state['kf_beta_t'] + sigma_H**2
                 # k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2 )
@@ -123,7 +124,7 @@ class KFOptimizer(Optimizer):
         return loss
 
 class KFOptimizer3(Optimizer):
-    def __init__(self, params, optimizer:Optimizer, kappa = 1.5, gamma = 1e-2):
+    def __init__(self, params, optimizer:Optimizer, kappa = 0.9, gamma = 1):
         '''
         # wrapping up the optimizer with
         optimizer = KFOptimizer(model.parameters(), optimizer, sigma_H, sigma_g)
@@ -131,6 +132,11 @@ class KFOptimizer3(Optimizer):
         if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
             optimizer.prestep()
         '''
+        if gamma<=0:
+            gamma = (1-kappa)/kappa
+            self.compute_grad = False
+        else:
+            self.compute_grad = True
         defaults = dict(kappa = kappa, gamma=gamma)
         self.optimizer = optimizer
         # if nesterov and (momentum <= 0 or dampening != 0):
@@ -145,23 +151,10 @@ class KFOptimizer3(Optimizer):
         for group in self.param_groups:
             kappa = group['kappa']
             gamma = group['gamma']
-            if gamma>0: # only compute grad_plus
-                for p in group['params']:
-                    if not p.requires_grad:
-                        continue
-                    state = self.state[p]
-                    if 'kf_beta_t' not in state:
-                        continue
-                    k_t = (state['kf_beta_t'] + 1.0)/(state['kf_beta_t'] + kappa**2)
-                    break
-                compute_grad = True
-                break
-            else:
-                compute_grad = False
-                break
-        if compute_grad:
+            break
+        if self.compute_grad:
             with torch.enable_grad():
-                loss = closure(scale = 1 - (1-k_t)/(gamma*k_t)) # compute grad
+                loss = closure(scale = 1 - (1-kappa)/(gamma*kappa)) # compute grad
         for group in self.param_groups:
             kappa = group['kappa']
             gamma = group['gamma']
@@ -169,18 +162,15 @@ class KFOptimizer3(Optimizer):
                 if not p.requires_grad:
                     continue
                 state = self.state[p]
-                if 'kf_beta_t' not in state:
+                if 'kf_d_t' not in state:
                     continue
-                k_t = (state['kf_beta_t'] + 1.0)/(state['kf_beta_t'] + kappa**2)
-                if gamma<=0:
-                    gamma = (1-k_t)/k_t
                 # perturb
                 p.data.add_(state['kf_d_t'], alpha = gamma)
         with torch.enable_grad():
-            if compute_grad:
-                closure(scale = (1-k_t)/(gamma*k_t))
+            if self.compute_grad:
+                closure(scale = (1-kappa)/(gamma*kappa))
             else:
-                loss = closure(scale = (1-k_t)/(gamma*k_t))
+                loss = closure(scale = 1)
         for group in self.param_groups:
             kappa = group['kappa']
             gamma = group['gamma']
@@ -188,11 +178,8 @@ class KFOptimizer3(Optimizer):
                 if not p.requires_grad:
                     continue
                 state = self.state[p]
-                if 'kf_beta_t' not in state:
+                if 'kf_d_t' not in state:
                     continue
-                k_t = (state['kf_beta_t'] + 1.0)/(state['kf_beta_t'] + kappa**2)
-                if gamma<=0:
-                    gamma = (1-k_t)/k_t
                 # perturb back
                 p.data.add_(state['kf_d_t'], alpha = -gamma)
         return loss
@@ -207,7 +194,6 @@ class KFOptimizer3(Optimizer):
 
         for group in self.param_groups:
             kappa = group['kappa']
-            gamma = group['gamma']
             for p in group['params']:
                 has_private_grad = False
                 if not p.requires_grad:
@@ -220,15 +206,10 @@ class KFOptimizer3(Optimizer):
                 else:
                     continue
                 state = self.state[p]
-                if 'kf_beta_t' not in state:
-                    state['kf_beta_t'] = 1
+                if 'kf_d_t' not in state:
                     state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
                     state['kf_m_t'] = grad.clone().to(p.data)
-                k_t = (state['kf_beta_t'] + 1.0)/(state['kf_beta_t'] + kappa**2)
-                if gamma<=0:
-                    gamma = (1-k_t)/k_t
-                state['kf_beta_t'] = (1-k_t)*(state['kf_beta_t'] + 1.0)
-                state['kf_m_t'].lerp_(grad, weight = k_t)
+                state['kf_m_t'].lerp_(grad, weight = kappa)
                 if has_private_grad:
                     p.private_grad = state['kf_m_t'].clone().to(p.data)
                 else:
@@ -241,45 +222,3 @@ class KFOptimizer3(Optimizer):
                     continue
                 self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
         return loss
-
-        # def finite_difference(self, closure = required):
-    #     loss = closure()
-    #     # loss.backward()
-    #     first_loss = loss
-    #     for group in self.param_groups:
-    #         sigma_g = group['sigma_g']
-    #         sigma_H = group['sigma_H']
-    #         for p in group['params']:
-    #             if p.grad is None:
-    #                 continue
-    #             if 'kf_beta_t' not in state:
-    #                 state['kf_beta_t'] = 1
-    #                 state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
-    #                 state['kf_m_t'] = p.grad.clone().to(p.data)
-    #             beta_t = state['kf_beta_t'] + sigma_H**2
-    #             k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2 )
-    #             k_1 = (1-k_t)/k_t
-    #             if 'kf_g_t' not in state or state['kf_g_t'] is None:
-    #                 state['kf_g_t'] = p.grad.clone().to(p.data)
-    #                 state['kf_step'] = 1
-    #             else:
-    #                 state['kf_g_t'].add_(p.grad)
-    #                 state['kf_step'] += 1
-    #             p.data.add_(state['kf_d_t'], alpha = -k_1)
-    #     # self.zero_grad()
-    #     loss = closure()
-    #     # loss.backward()
-    #     for group in self.param_groups:
-    #         sigma_g = group['sigma_g']
-    #         sigma_H = group['sigma_H']
-    #         for p in group['params']:
-    #             if p.grad is None:
-    #                 continue
-    #             beta_t = state['kf_beta_t'] + sigma_H**2
-    #             k_t = beta_t/(beta_t + sigma_g**2 - sigma_H**2)
-    #             k_1 = (1-k_t)/k_t
-                
-    #             p.data.add_(state['kf_d_t'], alpha = k_1)
-    #             state['kf_m_t'].lerp_(p.grad, weight = state['k_t'])
-    #             state['kf_g_t'] = None
-    #     return first_loss

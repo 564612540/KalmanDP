@@ -54,8 +54,10 @@ if __name__ == '__main__':
     if args.kf:
         if args.gamma == -1:
             optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=args.kappa, sigma_H=1)
-        else:
+        elif args.gamma > 0:
             optimizer = KFOptimizer3(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
+        else:
+            optimizer = KFOptimizer2(model.parameters(), optimizer=optimizer, sigma_g=args.kappa, sigma_H=1)
     
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     if args.clipping:
@@ -69,8 +71,10 @@ if __name__ == '__main__':
             noisy_train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, noise = noise, log_frequency = args.log_freq, acc_step = acc_step,lr_scheduler=lrscheduler)
         elif args.gamma == -1:
             train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
-        else:
+        elif args.gamma >0:
             train3(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
+        else:
+            train_2(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
         test(model, test_dl, criterion, log_file, device = device, epoch = E)
         
         
