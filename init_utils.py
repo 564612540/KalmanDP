@@ -105,7 +105,7 @@ def task_init(args):
         # optimizer.load_state_dict(state_dicts['optimizer'])
     
     if args.noise < 0 :
-        noise = get_noise_multiplier(target_delta=1.0/(sample_size)**1.1, target_epsilon=args.epsilon, sample_rate=args.bs/sample_size, epochs=args.epoch)
+        noise = get_noise_multiplier(target_delta=1.0/(sample_size)**1.1, target_epsilon=args.epsilon, sample_rate=args.bs/sample_size, epochs=args.epoch, accountant='prv')
     else:
         noise = args.noise
     acc_step = args.bs//args.mnbs
