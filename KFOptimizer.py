@@ -136,6 +136,7 @@ class KFOptimizer3(Optimizer):
             gamma = (1-kappa)/kappa
             self.compute_grad = False
         else:
+            self.scaling_factor = (gamma*kappa+kappa-1)/(1-kappa)
             self.compute_grad = True
         defaults = dict(kappa = kappa, gamma=gamma)
         self.optimizer = optimizer
@@ -154,7 +155,7 @@ class KFOptimizer3(Optimizer):
             break
         if self.compute_grad:
             with torch.enable_grad():
-                loss = closure(scale = 1 - (1-kappa)/(gamma*kappa)) # compute grad
+                loss = closure() # compute grad
         for group in self.param_groups:
             kappa = group['kappa']
             gamma = group['gamma']
@@ -166,11 +167,16 @@ class KFOptimizer3(Optimizer):
                     continue
                 # perturb
                 p.data.add_(state['kf_d_t'], alpha = gamma)
+                if self.compute_grad:
+                    if hasattr(p, 'private_grad'):
+                        p.private_grad.mul_(self.scaling_factor)
+                    elif p.grad is not None:
+                        p.grad.mul_(self.scaling_factor)
         with torch.enable_grad():
             if self.compute_grad:
-                closure(scale = (1-kappa)/(gamma*kappa))
+                closure()
             else:
-                loss = closure(scale = 1)
+                loss = closure()
         for group in self.param_groups:
             kappa = group['kappa']
             gamma = group['gamma']
@@ -182,6 +188,11 @@ class KFOptimizer3(Optimizer):
                     continue
                 # perturb back
                 p.data.add_(state['kf_d_t'], alpha = -gamma)
+                if self.compute_grad:
+                    if hasattr(p, 'private_grad'):
+                        p.private_grad.div_(self.scaling_factor)
+                    elif p.grad is not None:
+                        p.grad.div_(self.scaling_factor)
         return loss
             
 
@@ -205,6 +216,8 @@ class KFOptimizer3(Optimizer):
                     grad = p.grad
                 else:
                     continue
+                if self.compute_grad:
+                    grad.div_(1+1/self.scaling_factor)
                 state = self.state[p]
                 if 'kf_d_t' not in state:
                     state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
