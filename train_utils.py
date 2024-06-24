@@ -447,3 +447,91 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         self.last_epoch = math.floor(epoch)
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
+
+
+def zo_perturb(model, seed, scale):
+    torch.manual_seed(seed)
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            z = torch.normal(
+                mean=0,
+                std=1,
+                size=param.data.size(),
+                device=param.data.device,
+                dtype=param.data.dtype,
+            )
+            param.data.add_(z, alpha = scale)
+
+def zo_perturb_and_create_grad(model, seed, scale, loss_diff):
+    torch.manual_seed(seed)
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            z = torch.normal(
+                mean=0,
+                std=1,
+                size=param.data.size(),
+                device=param.data.device,
+                dtype=param.data.dtype,
+            )
+            param.data.add_(z, alpha = scale)
+            if param.grad is None:
+                param.grad = z * loss_diff / (2.0*scale)
+            else:
+                param.grad.add_(z, alpha = loss_diff / (2.0*scale))
+
+
+def zo_backward(model, criterion, input, label, scale):
+    old_seed = torch.seed()
+    new_seed = np.random.randint(1000000000)
+    model.eval()
+    with torch.inference_mode():
+        zo_perturb(model, new_seed, scale)
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss_diff = criterion(predict, label)
+        zo_perturb(model, new_seed, -2*scale)
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss_diff -= criterion(predict, label)
+        zo_perturb_and_create_grad(model, new_seed, scale, loss_diff)
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss = criterion(predict, label)
+    torch.manual_seed(old_seed)
+    return loss, predict
+    
+def train_zo(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None):
+    model.to(device)
+    # model.train()
+    train_loss = 0
+    total = 0
+    correct = 0
+    # print(" ")
+    for t, (input, label) in enumerate(train_dl):
+        input = input.to(device)
+        label = label.to(device)
+        def closure(scale = 1.0):
+            loss, predict = zo_backward(model, criterion, input, label, scale = 1e-3)
+            return loss, predict
+        
+        loss, predict = optimizer.prestep(closure)
+        
+        train_loss = loss.item()
+        _, predicted = predict.max(1)
+        total = total + label.size(0)
+        correct = correct + predicted.eq(label).sum().item()
+
+        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
+            if lr_scheduler is not None:
+                lr_scheduler.step()
+            optimizer.step()
+            # optimizer.prestep()
+            optimizer.zero_grad()
+
+        if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
+            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
+            if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
+                log_file.update([epoch, t],[100.*correct/total, train_loss])
