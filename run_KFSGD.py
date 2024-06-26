@@ -52,9 +52,7 @@ if __name__ == '__main__':
         lrscheduler = None
         
     if args.kf:
-        if args.gamma == -1:
-            optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, sigma_g=args.kappa, sigma_H=1)
-        elif args.gamma > 0:
+        if args.gamma == -1 or args.gamma > 0:
             optimizer = KFOptimizer3(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
         else:
             optimizer = KFOptimizer2(model.parameters(), optimizer=optimizer, sigma_g=args.kappa, sigma_H=1)
@@ -69,9 +67,7 @@ if __name__ == '__main__':
         if use_manual_noise:
             # print('using manual noise')
             noisy_train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, noise = noise, log_frequency = args.log_freq, acc_step = acc_step,lr_scheduler=lrscheduler)
-        elif args.gamma == -1:
-            train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
-        elif args.gamma >0:
+        elif args.gamma == -1 or args.gamma >0:
             train3(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
         else:
             train_2(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)

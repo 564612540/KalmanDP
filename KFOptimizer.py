@@ -135,6 +135,9 @@ class KFOptimizer3(Optimizer):
         if gamma<=0:
             gamma = (1-kappa)/kappa
             self.compute_grad = False
+        elif abs(gamma - (1-kappa)/kappa) <1e-3:
+            gamma = (1-kappa)/kappa
+            self.compute_grad = False
         else:
             self.scaling_factor = (gamma*kappa+kappa-1)/(1-kappa)
             self.compute_grad = True
