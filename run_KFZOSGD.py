@@ -1,21 +1,11 @@
 import torch
 import math
-# from data_utils import generate_Cifar
-from KFOptimizer import KFOptimizer, KFOptimizer3
-from KFOptimizer2 import KFOptimizer2
-from train_utils import train, noisy_train, test, train3, train_zo
+from KFOptimizer import KFOptimizer
+from train_utils import test, train_zo
 from init_utils import base_parse_args, task_init, logger_init
 # from fastDP import PrivacyEngine
-from AdamBC import AdamBC
-#PrivacyEngine_Distributed_extending,PrivacyEngine_Distributed_Stage_2_and_3
-# from opacus.accountants.utils import get_noise_multiplier
-# from opacus.validators import ModuleValidator
 import argparse
 import warnings
-# import timm
-# import os
-# from datetime import datetime
-# import wandb
 
 if __name__ == '__main__':
     warnings.filterwarnings("ignore")
@@ -44,7 +34,7 @@ if __name__ == '__main__':
         lrscheduler = None
         
     if args.kf:
-        optimizer = KFOptimizer3(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
+        optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
     
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
 

@@ -57,16 +57,21 @@ def noisy_train(model, train_dl, optimizer, criterion, log_file, device = 'cpu',
     correct = 0
     snr = 0
     for t, (input, label) in enumerate(train_dl):
-        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
-            optimizer.prestep()
-        
         input = input.to(device)
         label = label.to(device)
-        predict = model(input)
-        if not isinstance(predict, torch.Tensor):
-            predict = predict.logits
-        loss = criterion(predict, label)
-        loss.backward()
+        def closure(scale = 1.0):
+            predict = model(input)
+            if not isinstance(predict, torch.Tensor):
+                predict = predict.logits
+            loss = criterion(predict, label)
+            scaled_loss = loss*scale
+            scaled_loss.backward()
+            return loss, predict
+        
+        if hasattr(optimizer, 'prestep'):
+            loss, predict = optimizer.prestep(closure)
+        else:
+            loss, predict = closure()
 
         train_loss = loss.item()
         _, predicted = predict.max(1)
