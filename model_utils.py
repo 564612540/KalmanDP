@@ -66,7 +66,6 @@ import os
 # os.environ['HF_DATASETS_OFFLINE '] = "1"
 from transformers import AutoTokenizer, GPT2LMHeadModel, AutoConfig, RobertaForSequenceClassification
 from torch.nn import CrossEntropyLoss
-import torch
 from pathlib import Path
 
 def create_roberta(label_to_id, num_lables):
@@ -147,3 +146,96 @@ def keytoken_weighted_loss(inputs, logits, keytoken_ids, alpha=1.0):
     # Calculate weighted average
     weighted_loss = (loss_per_sample * weights).mean()
     return weighted_loss
+
+# from functools import partial
+# from typing import Any, Callable, List, Optional, Type, Union
+# from torch import Tensor
+import torch.nn.functional as F
+
+
+class BasicBlock(nn.Module):
+    def __init__(self, in_planes, out_planes, stride, dropRate=0.0):
+        super(BasicBlock, self).__init__()
+        self.gn1 = nn.GroupNorm(num_groups=16, num_channels=in_planes)
+        self.relu1 = nn.Tanh()
+        self.conv1 = nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                               padding=1, bias=False)
+        self.gn2 = nn.GroupNorm(num_groups=16, num_channels=out_planes)
+        self.relu2 = nn.Tanh()
+        self.conv2 = nn.Conv2d(out_planes, out_planes, kernel_size=3, stride=1,
+                               padding=1, bias=False)
+        self.droprate = dropRate
+        self.equalInOut = (in_planes == out_planes)
+        self.convShortcut = (not self.equalInOut) and nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride,
+                               padding=0, bias=False) or None
+    def forward(self, x):
+        if not self.equalInOut:
+            x = self.relu1(self.gn1(x))
+        else:
+            out = self.relu1(self.gn1(x))
+        out = self.relu2(self.gn2(self.conv1(out if self.equalInOut else x)))
+        if self.droprate > 0:
+            out = F.dropout(out, p=self.droprate, training=self.training)
+        out = self.conv2(out)
+        return torch.add(x if self.equalInOut else self.convShortcut(x), out)
+
+class NetworkBlock(nn.Module):
+    def __init__(self, nb_layers, in_planes, out_planes, block, stride, dropRate=0.0):
+        super(NetworkBlock, self).__init__()
+        self.layer = self._make_layer(block, in_planes, out_planes, nb_layers, stride, dropRate)
+    def _make_layer(self, block, in_planes, out_planes, nb_layers, stride, dropRate):
+        layers = []
+        for i in range(int(nb_layers)):
+            layers.append(block(i == 0 and in_planes or out_planes, out_planes, i == 0 and stride or 1, dropRate))
+        return nn.Sequential(*layers)
+    def forward(self, x):
+        return self.layer(x)
+
+class WideResNet(nn.Module):
+    def __init__(self, depth, num_classes, widen_factor=1, dropRate=0.0):
+        super(WideResNet, self).__init__()
+        nChannels = [16, 16*widen_factor, 32*widen_factor, 64*widen_factor]
+        assert((depth - 4) % 6 == 0)
+        n = (depth - 4) / 6
+        block = BasicBlock
+        # 1st conv before any network block
+        self.conv1 = nn.Conv2d(3, nChannels[0], kernel_size=3, stride=1,
+                               padding=1, bias=False)
+        # 1st block
+        self.block1 = NetworkBlock(n, nChannels[0], nChannels[1], block, 1, dropRate)
+        # 2nd block
+        self.block2 = NetworkBlock(n, nChannels[1], nChannels[2], block, 2, dropRate)
+        # 3rd block
+        self.block3 = NetworkBlock(n, nChannels[2], nChannels[3], block, 2, dropRate)
+        # global average pooling and classifier
+        self.gn1 = nn.GroupNorm(num_groups=16, num_channels=nChannels[3])
+        self.relu = nn.Tanh()
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(nChannels[3], num_classes)
+        self.nChannels = nChannels[3]
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.GroupNorm):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                m.bias.data.zero_()
+    def forward(self, x):
+        # print(x.size())
+        out = self.conv1(x)
+        # print(out.size())
+        out = self.block1(out)
+        # print(out.size())
+        out = self.block2(out)
+        # print(out.size())
+        out = self.block3(out)
+        # print(out.size())
+        out = self.relu(self.gn1(out))
+        # print(out.size())
+        out = self.avgpool(out)
+        # print(out.size())
+        out = out.view(out.size(0), self.nChannels)
+        # print(out.size())
+        return self.fc(out)

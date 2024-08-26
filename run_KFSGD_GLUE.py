@@ -1,8 +1,8 @@
 import torch
 import math
-from KFOptimizer import KFOptimizer
-from train_utils import noisy_train, train, test
-from init_utils import base_parse_args, task_init, logger_init
+from KFOptimizer import  KFOptimizer
+from train_utils import train_nlp, test_nlp
+from init_utils import base_parse_args, logger_init, nlp_task_init
 from fastDP import PrivacyEngine
 from AdamBC import AdamBC
 import argparse
@@ -15,11 +15,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='LP DPSGD')
     parser = base_parse_args(parser)
     args = parser.parse_args()
-    train_dl, test_dl, model, device, sample_size, acc_step, noise = task_init(args)
+    train_dl, test_dl, model, device, sample_size, acc_step, noise, tokenizer = nlp_task_init(args)
     log_file = logger_init(args, noise, sample_size//args.mnbs,type=args.log_type)
-    if args.data == 'imgnet1k':
-        train_dl_1 = train_dl
-        test_dl_1 = test_dl
 
     use_manual_noise = not args.clipping and noise>0
     if use_manual_noise:
@@ -32,7 +29,7 @@ if __name__ == '__main__':
     elif args.algo == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     elif args.algo == 'adamw':
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.04)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     elif args.algo == 'adambc':
         optimizer = AdamBC(model.parameters(), lr=args.lr, dp_batch_size=args.bs, dp_l2_norm_clip=1, dp_noise_multiplier=noise, eps_root=1e-8)
     else:
@@ -46,13 +43,12 @@ if __name__ == '__main__':
         checkpoint = torch.load(args.load_path, map_location='cuda')
         optimizer.load_state_dict(checkpoint['optimizer'])
         start = checkpoint['epoch'] + 1
-    
     if args.scheduler:
         from train_utils import CosineAnnealingWarmupRestarts
         lrscheduler = CosineAnnealingWarmupRestarts(optimizer, max_lr=args.lr, first_cycle_steps= sample_size//args.bs * args.epoch, warmup_steps= (sample_size*args.epoch)//(args.bs*20), last_epoch = start*sample_size//args.bs-1)
     else:
         lrscheduler = None
-
+        
     if args.kf:
         optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
     
@@ -61,20 +57,9 @@ if __name__ == '__main__':
         privacy_engine = PrivacyEngine(model, noise_multiplier=noise, numerical_stability_constant=1e-3, grad_accum_steps = acc_step, sample_size= sample_size, batch_size=args.bs, epochs= args.epoch, per_sample_clip=args.clipping, torch_seed_is_fixed=False, clipping_fn=args.clipping_fn, clipping_style=args.clipping_style, max_grad_norm=args.clipping_norm)
         privacy_engine.attach(optimizer)
 
-    if args.kf and args.load_path is not None:
-        optimizer.load_state_dict(checkpoint['kf_optimizer'])
-
-    for E in range(start, args.epoch):
-        if args.data == 'imgnet1k':
-            train_dl = train_dl_1()
-            test_dl = test_dl_1()
-        if use_manual_noise:
-            noisy_train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, noise = noise, log_frequency = args.log_freq, acc_step = acc_step,lr_scheduler=lrscheduler)
-        train(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
-        test(model, test_dl, criterion, log_file, device = device, epoch = E)
-        if args.data == 'imgnet1k':
-            del train_dl
-            del test_dl
+    for E in range(args.epoch):
+        train_nlp(model, train_dl, optimizer, criterion, log_file, device = device, epoch = E, log_frequency = args.log_freq, acc_step = acc_step, lr_scheduler=lrscheduler)
+        test_nlp(model, test_dl, criterion, log_file, device = device, epoch = E)
         gc.collect()
         torch.cuda.empty_cache()
         if args.save_freq >0 and E % args.save_freq == 0 and args.save_path is not None:

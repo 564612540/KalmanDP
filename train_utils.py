@@ -4,159 +4,7 @@ from tqdm import tqdm
 from tqdm._utils import _term_move_up
 import torch.autograd as ta
 
-def train_R(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None, mode = 'coordinate', position = 0):
-    model.to(device)
-    model.train()
-    train_loss = 0
-    total = 0
-    correct = 0
-    # print(" ")
-    for t, (input, label) in enumerate(train_dl):
-        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
-            optimizer.prestep()
-        # with torch.autocast(device_type="cuda", dtype=torch.float16):
-        input = input.to(device)
-        label = label.to(device)
-        predict = model(input)
-        if not isinstance(predict, torch.Tensor):
-            predict = predict.logits
-        loss = criterion(predict, label)
-        loss.backward()
-        
-        train_loss = loss.item()
-        _, predicted = predict.max(1)
-        total = total + label.size(0)
-        correct = correct + predicted.eq(label).sum().item()
-
-        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
-            if lr_scheduler is not None:
-                lr_scheduler.step()
-            gammas, _ = optimizer.step()
-            # print(gammas)
-            # optimizer.prestep()
-            optimizer.zero_grad()
-
-        if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
-            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
-            if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
-                gamma_min = min(gammas)
-                gamma_max = max(gammas)
-                gamma_avg = sum(gammas)/len(gammas)
-                gamma_std = np.std(gammas)
-                log_file.update([epoch, t],[100.*correct/total, train_loss, gamma_min, gamma_max, gamma_avg, gamma_std])
-
 def train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None):
-    model.to(device)
-    model.train()
-    train_loss = 0
-    total = 0
-    correct = 0
-    # print(" ")
-    for t, (input, label) in enumerate(train_dl):
-        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
-            optimizer.prestep()
-        # with torch.autocast(device_type="cuda", dtype=torch.float16):
-        input = input.to(device)
-        label = label.to(device)
-        predict = model(input)
-        if not isinstance(predict, torch.Tensor):
-            predict = predict.logits
-        loss = criterion(predict, label)
-        loss.backward()
-        
-        train_loss = loss.item()
-        _, predicted = predict.max(1)
-        total = total + label.size(0)
-        correct = correct + predicted.eq(label).sum().item()
-
-        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
-            if lr_scheduler is not None:
-                lr_scheduler.step()
-            optimizer.step()
-            # optimizer.prestep()
-            optimizer.zero_grad()
-
-        if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
-            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
-            if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
-                log_file.update([epoch, t],[100.*correct/total, train_loss])
-
-def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None, gamma=0.1):
-    model.to(device)
-    model.train()
-    train_loss = 0
-    total = 0
-    correct = 0
-    # print(" ")
-    for t, (input, label) in enumerate(train_dl):
-        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
-            optimizer.prestep()
-        # with torch.autocast(device_type="cuda", dtype=torch.float16):
-        input = input.to(device)
-        label = label.to(device)
-        predict = model(input)
-        if not isinstance(predict, torch.Tensor):
-            predict = predict.logits
-        loss = criterion(predict, label)
-        loss.backward()
-        ### the grad is computed at x_t_plus
-        for p in model.parameters():
-            if p.requires_grad:
-                if not hasattr(p,'grad_t_plus'):
-                    if hasattr(p,'private_grad'):
-                        p.grad_t_plus = p.private_grad; p.private_grad=torch.zeros_like(p.data)
-                    else:
-                        p.grad_t_plus = p.grad
-                else:
-                    if hasattr(p,'private_grad'):
-                        p.grad_t_plus += p.private_grad; p.private_grad=torch.zeros_like(p.data)
-                    else:
-                        p.grad_t_plus += p.grad
-                del p.grad
-
-        ### change back to x_t
-        for p in model.parameters():
-            if p.requires_grad:
-                p.data=p.x_t.clone()
-        predict = model(input)
-        if not isinstance(predict, torch.Tensor):
-            predict = predict.logits
-        loss = criterion(predict, label)
-        loss.backward()
-        for p in model.parameters():
-            if p.requires_grad:
-                if not hasattr(p,'grad_t'):
-                    if hasattr(p,'private_grad'):
-                        p.grad_t = p.private_grad; p.private_grad=torch.zeros_like(p.data)
-                    else:
-                        p.grad_t = p.grad
-                else:
-                    if hasattr(p,'private_grad'):
-                        p.grad_t += p.private_grad; p.private_grad=torch.zeros_like(p.data)
-                    else:
-                        p.grad_t += p.grad
-                del p.grad
-        ########
-        
-        
-        train_loss = loss.item()
-        _, predicted = predict.max(1)
-        total = total + label.size(0)
-        correct = correct + predicted.eq(label).sum().item()
-
-        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
-            if lr_scheduler is not None:
-                lr_scheduler.step()
-            optimizer.step()
-            # optimizer.prestep()
-            optimizer.zero_grad()
-
-        if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
-            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
-            if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
-                log_file.update([epoch, t],[100.*correct/total, train_loss])
-
-def train3(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None):
     model.to(device)
     model.train()
     train_loss = 0
@@ -175,12 +23,20 @@ def train3(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoc
             scaled_loss.backward()
             return loss, predict
         
-        loss, predict = optimizer.prestep(closure)
+        if hasattr(optimizer, 'prestep'):
+            loss, predict = optimizer.prestep(closure)
+        else:
+            loss, predict = closure()
         
         train_loss = loss.item()
         _, predicted = predict.max(1)
         total = total + label.size(0)
         correct = correct + predicted.eq(label).sum().item()
+
+        del input
+        del label
+        del loss
+        del predict
 
         if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
             if lr_scheduler is not None:
@@ -500,9 +356,10 @@ def zo_backward(model, criterion, input, label, scale):
         if not isinstance(predict, torch.Tensor):
             predict = predict.logits
         loss = criterion(predict, label)
-    torch.manual_seed(old_seed)
+    torch.manual_seed(old_seed + new_seed)
     return loss, predict
-    
+
+@torch.inference_mode()
 def train_zo(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None):
     model.to(device)
     # model.train()
@@ -517,7 +374,163 @@ def train_zo(model, train_dl, optimizer, criterion, log_file, device = 'cpu', ep
             loss, predict = zo_backward(model, criterion, input, label, scale = 1e-3)
             return loss, predict
         
-        loss, predict = optimizer.prestep(closure)
+        if hasattr(optimizer, 'prestep'):
+            loss, predict = optimizer.prestep(closure)
+        else:
+            loss, predict = closure()
+        
+        train_loss = loss.item()
+        _, predicted = predict.max(1)
+        total = total + label.size(0)
+        correct = correct + predicted.eq(label).sum().item()
+
+        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
+            if lr_scheduler is not None:
+                lr_scheduler.step()
+            optimizer.step()
+            # optimizer.prestep()
+            optimizer.zero_grad()
+
+        if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
+            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
+            if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
+                log_file.update([epoch, t],[100.*correct/total, train_loss])
+
+
+def train_R(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None, mode = 'coordinate', position = 0):
+    model.to(device)
+    model.train()
+    train_loss = 0
+    total = 0
+    correct = 0
+    # print(" ")
+    for t, (input, label) in enumerate(train_dl):
+        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
+            optimizer.prestep()
+        # with torch.autocast(device_type="cuda", dtype=torch.float16):
+        input = input.to(device)
+        label = label.to(device)
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss = criterion(predict, label)
+        loss.backward()
+        
+        train_loss = loss.item()
+        _, predicted = predict.max(1)
+        total = total + label.size(0)
+        correct = correct + predicted.eq(label).sum().item()
+
+        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
+            if lr_scheduler is not None:
+                lr_scheduler.step()
+            gammas, _ = optimizer.step()
+            # print(gammas)
+            # optimizer.prestep()
+            optimizer.zero_grad()
+
+        if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
+            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
+            if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
+                gamma_min = min(gammas)
+                gamma_max = max(gammas)
+                gamma_avg = sum(gammas)/len(gammas)
+                gamma_std = np.std(gammas)
+                log_file.update([epoch, t],[100.*correct/total, train_loss, gamma_min, gamma_max, gamma_avg, gamma_std])
+
+def train_3(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None):
+    model.to(device)
+    model.train()
+    train_loss = 0
+    total = 0
+    correct = 0
+    # print(" ")
+    for t, (input, label) in enumerate(train_dl):
+        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
+            optimizer.prestep()
+        # with torch.autocast(device_type="cuda", dtype=torch.float16):
+        input = input.to(device)
+        label = label.to(device)
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss = criterion(predict, label)
+        loss.backward()
+        
+        train_loss = loss.item()
+        _, predicted = predict.max(1)
+        total = total + label.size(0)
+        correct = correct + predicted.eq(label).sum().item()
+
+        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
+            if lr_scheduler is not None:
+                lr_scheduler.step()
+            optimizer.step()
+            # optimizer.prestep()
+            optimizer.zero_grad()
+
+        if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
+            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
+            if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
+                log_file.update([epoch, t],[100.*correct/total, train_loss])
+
+def train_2(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, log_frequency = -1, acc_step = 1, lr_scheduler = None, gamma=0.1):
+    model.to(device)
+    model.train()
+    train_loss = 0
+    total = 0
+    correct = 0
+    # print(" ")
+    for t, (input, label) in enumerate(train_dl):
+        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
+            optimizer.prestep()
+        # with torch.autocast(device_type="cuda", dtype=torch.float16):
+        input = input.to(device)
+        label = label.to(device)
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss = criterion(predict, label)
+        loss.backward()
+        ### the grad is computed at x_t_plus
+        for p in model.parameters():
+            if p.requires_grad:
+                if not hasattr(p,'grad_t_plus'):
+                    if hasattr(p,'private_grad'):
+                        p.grad_t_plus = p.private_grad; p.private_grad=torch.zeros_like(p.data)
+                    else:
+                        p.grad_t_plus = p.grad
+                else:
+                    if hasattr(p,'private_grad'):
+                        p.grad_t_plus += p.private_grad; p.private_grad=torch.zeros_like(p.data)
+                    else:
+                        p.grad_t_plus += p.grad
+                del p.grad
+
+        ### change back to x_t
+        for p in model.parameters():
+            if p.requires_grad:
+                p.data=p.x_t.clone()
+        predict = model(input)
+        if not isinstance(predict, torch.Tensor):
+            predict = predict.logits
+        loss = criterion(predict, label)
+        loss.backward()
+        for p in model.parameters():
+            if p.requires_grad:
+                if not hasattr(p,'grad_t'):
+                    if hasattr(p,'private_grad'):
+                        p.grad_t = p.private_grad; p.private_grad=torch.zeros_like(p.data)
+                    else:
+                        p.grad_t = p.grad
+                else:
+                    if hasattr(p,'private_grad'):
+                        p.grad_t += p.private_grad; p.private_grad=torch.zeros_like(p.data)
+                    else:
+                        p.grad_t += p.grad
+                del p.grad
+        ########
+        
         
         train_loss = loss.item()
         _, predicted = predict.max(1)

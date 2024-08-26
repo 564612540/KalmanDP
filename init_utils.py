@@ -13,7 +13,7 @@ try:
     HAS_WANDB = True
 except ImportError as e:
     HAS_WANDB = False
-from model_utils import LinearModel, CNN5, create_roberta
+from model_utils import LinearModel, CNN5, create_roberta, WideResNet
 
 def base_parse_args(parser):
     # Task arguments
@@ -86,21 +86,29 @@ def task_init(args):
         sample_size = 50000
     elif args.data == 'imgnet1k':
         num_classes = 1000
-        train_dl, test_dl = generate_imgnet1k(args.mnbs)
-        sample_size = len(train_dl.dataset)
+        train_dl, test_dl = generate_imgnet1k(args.mnbs, args.data_path)
+        temp_train_dl = train_dl()
+        sample_size = len(temp_train_dl.dataset)
+        del temp_train_dl
     elif args.data == 'mnist':
         model = LinearModel(28*28, 10)
         train_dl, test_dl = generate_Mnist(args.mnbs, args.data_path)
         sample_size = 60000
     if model is None:
-        if args.model != 'cnn5':
-            model = timm.create_model(args.model, pretrained=args.pretrained, num_classes = num_classes)
-        else:
+        if args.model == 'cnn5':
             model = CNN5(num_classes = num_classes, normalization= True)
+        elif args.model == 'wrn_40_4':
+            model = WideResNet(depth = 40, num_classes=num_classes, widen_factor=4)
+        elif args.model == 'wrn_16_4':
+            model = WideResNet(depth = 16, num_classes=num_classes, widen_factor=4)
+        elif args.model == 'wrn_28_4':
+            model = WideResNet(depth = 28, num_classes=num_classes, widen_factor=4)
+        else:
+            model = timm.create_model(args.model, pretrained=args.pretrained, num_classes = num_classes)
     model = ModuleValidator.fix(model)
     model.to(device)
     if args.load_path is not None:
-        checkpoint = torch.load(args.model_path, map_location='cuda')
+        checkpoint = torch.load(args.load_path, map_location='cuda')
         model.load_state_dict(checkpoint['model'], strict = True)
         # optimizer.load_state_dict(state_dicts['optimizer'])
     
@@ -108,8 +116,11 @@ def task_init(args):
         noise = get_noise_multiplier(target_delta=1.0/(sample_size)**1.1, target_epsilon=args.epsilon, sample_rate=args.bs/sample_size, epochs=args.epoch, accountant='prv')
     else:
         noise = args.noise
+    if args.kf:
+        c = (1-args.kappa)/(args.gamma*args.kappa)
+        norm_factor = math.sqrt(c**2 + (1-c)**2)
+        noise = noise/norm_factor
     acc_step = args.bs//args.mnbs
-    
     return train_dl, test_dl, model, device, sample_size, acc_step, noise
 
 def nlp_task_init(args):
@@ -127,7 +138,7 @@ def nlp_task_init(args):
     sample_size = len(train_dl.dataset)
     print(sample_size)
     if args.load_path is not None:
-        checkpoint = torch.load(args.model_path, map_location='cuda')
+        checkpoint = torch.load(args.load_path, map_location='cuda')
         model.load_state_dict(checkpoint['model'], strict = True)
         # optimizer.load_state_dict(state_dicts['optimizer'])
     

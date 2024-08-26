@@ -3,6 +3,133 @@ from torch.optim.optimizer import Optimizer, required
 import torch.autograd as ta
 
 class KFOptimizer(Optimizer):
+    def __init__(self, params, optimizer:Optimizer, kappa = 0.9, gamma = 1):
+        '''
+        # wrapping up the optimizer with
+        optimizer = KFOptimizer(model.parameters(), optimizer, sigma_H, sigma_g)
+        # before the first step of gradient accumulation:
+        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
+            optimizer.prestep()
+        '''
+        if gamma ==0:
+            gamma = (1-kappa)/kappa
+            self.compute_grad = False
+        elif abs(gamma - (1-kappa)/kappa) <1e-3:
+            gamma = (1-kappa)/kappa
+            self.compute_grad = False
+        else:
+            self.scaling_factor = (gamma*kappa+kappa-1)/(1-kappa)
+            self.compute_grad = True
+        defaults = dict(kappa = kappa, gamma=gamma)
+        self.optimizer = optimizer
+        # if nesterov and (momentum <= 0 or dampening != 0):
+            # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
+        super(KFOptimizer, self).__init__(params, defaults)
+
+    def __setstate__(self, state):
+        super(KFOptimizer, self).__setstate__(state)
+
+    def prestep(self, closure=required):
+        loss = None
+        for group in self.param_groups:
+            kappa = group['kappa']
+            gamma = group['gamma']
+            break
+        if self.compute_grad:
+            with torch.enable_grad():
+                loss = closure() # compute grad
+        for group in self.param_groups:
+            kappa = group['kappa']
+            gamma = group['gamma']
+            for p in group['params']:
+                if not p.requires_grad:
+                    continue
+                state = self.state[p]
+                if 'kf_d_t' not in state:
+                    continue
+                # perturb
+                p.data.add_(state['kf_d_t'], alpha = gamma)
+                if self.compute_grad:
+                    if hasattr(p, 'private_grad'):
+                        p.private_grad.mul_(self.scaling_factor)
+                    elif p.grad is not None:
+                        p.grad.mul_(self.scaling_factor)
+        with torch.enable_grad():
+            if self.compute_grad:
+                closure()
+            else:
+                loss = closure()
+        for group in self.param_groups:
+            kappa = group['kappa']
+            gamma = group['gamma']
+            for p in group['params']:
+                if not p.requires_grad:
+                    continue
+                state = self.state[p]
+                if 'kf_d_t' not in state:
+                    continue
+                # perturb back
+                p.data.add_(state['kf_d_t'], alpha = -gamma)
+                if self.compute_grad:
+                    if hasattr(p, 'private_grad'):
+                        p.private_grad.div_(self.scaling_factor)
+                    elif p.grad is not None:
+                        p.grad.div_(self.scaling_factor)
+        return loss
+            
+
+    def step(self, closure=None):
+        """Performs a single optimization step.
+        Arguments:
+            closure (callable, optional): A closure that reevaluates the model
+                and returns the loss.
+        """
+        scaling_factor = 0.0
+        for group in self.param_groups:
+            kappa = group['kappa']
+            for p in group['params']:
+                has_private_grad = False
+                if not p.requires_grad:
+                    continue
+                if hasattr(p, 'private_grad'):
+                    grad = p.private_grad
+                    has_private_grad = True
+                elif p.grad is not None:
+                    grad = p.grad
+                else:
+                    continue
+                if self.compute_grad:
+                    grad.div_(1+1/self.scaling_factor)
+                state = self.state[p]
+                if 'kf_d_t' not in state:
+                    state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
+                    state['kf_m_t'] = grad.clone().to(p.data)
+                state['kf_m_t'].lerp_(grad, weight = kappa)
+                if has_private_grad:
+                    p.private_grad = state['kf_m_t'].clone().to(p.data)
+                else:
+                    p.grad = state['kf_m_t'].clone().to(p.data)
+                    scaling_factor += p.grad.norm().pow(2)
+                state['kf_d_t'] = -p.data.clone().to(p.data)
+        if scaling_factor > 0 and not has_private_grad:
+            scaling_factor = scaling_factor.sqrt()
+            for group in self.param_groups:
+                for p in group['params']:
+                    if not p.requires_grad:
+                        continue
+                    if p.grad is not None:
+                        p.grad.div_(scaling_factor)
+        loss = self.optimizer.step(closure)
+        for group in self.param_groups:
+            for p in group['params']:
+                if not p.requires_grad:
+                    continue
+                if p.grad is not None:
+                    self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
+        return loss
+
+
+class KFOptimizer_2(Optimizer):
     def __init__(self, params, optimizer:Optimizer, sigma_H=3e-6, sigma_g=1e-5):
         '''
         # wrapping up the optimizer with
@@ -15,10 +142,10 @@ class KFOptimizer(Optimizer):
         self.optimizer = optimizer
         # if nesterov and (momentum <= 0 or dampening != 0):
             # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
-        super(KFOptimizer, self).__init__(params, defaults)
+        super(KFOptimizer_2, self).__init__(params, defaults)
 
     def __setstate__(self, state):
-        super(KFOptimizer, self).__setstate__(state)
+        super(KFOptimizer_2, self).__setstate__(state)
 
     def hessian_d_product(self):
         """
@@ -123,118 +250,3 @@ class KFOptimizer(Optimizer):
                 # p.data.add_(state['kf_d_t'], alpha = k_1)
         return loss
 
-class KFOptimizer3(Optimizer):
-    def __init__(self, params, optimizer:Optimizer, kappa = 0.9, gamma = 1):
-        '''
-        # wrapping up the optimizer with
-        optimizer = KFOptimizer(model.parameters(), optimizer, sigma_H, sigma_g)
-        # before the first step of gradient accumulation:
-        if t % acc_step == 0 and hasattr(optimizer, 'prestep'):
-            optimizer.prestep()
-        '''
-        if gamma<=0:
-            gamma = (1-kappa)/kappa
-            self.compute_grad = False
-        elif abs(gamma - (1-kappa)/kappa) <1e-3:
-            gamma = (1-kappa)/kappa
-            self.compute_grad = False
-        else:
-            self.scaling_factor = (gamma*kappa+kappa-1)/(1-kappa)
-            self.compute_grad = True
-        defaults = dict(kappa = kappa, gamma=gamma)
-        self.optimizer = optimizer
-        # if nesterov and (momentum <= 0 or dampening != 0):
-            # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
-        super(KFOptimizer3, self).__init__(params, defaults)
-
-    def __setstate__(self, state):
-        super(KFOptimizer3, self).__setstate__(state)
-
-    def prestep(self, closure=required):
-        loss = None
-        for group in self.param_groups:
-            kappa = group['kappa']
-            gamma = group['gamma']
-            break
-        if self.compute_grad:
-            with torch.enable_grad():
-                loss = closure() # compute grad
-        for group in self.param_groups:
-            kappa = group['kappa']
-            gamma = group['gamma']
-            for p in group['params']:
-                if not p.requires_grad:
-                    continue
-                state = self.state[p]
-                if 'kf_d_t' not in state:
-                    continue
-                # perturb
-                p.data.add_(state['kf_d_t'], alpha = gamma)
-                if self.compute_grad:
-                    if hasattr(p, 'private_grad'):
-                        p.private_grad.mul_(self.scaling_factor)
-                    elif p.grad is not None:
-                        p.grad.mul_(self.scaling_factor)
-        with torch.enable_grad():
-            if self.compute_grad:
-                closure()
-            else:
-                loss = closure()
-        for group in self.param_groups:
-            kappa = group['kappa']
-            gamma = group['gamma']
-            for p in group['params']:
-                if not p.requires_grad:
-                    continue
-                state = self.state[p]
-                if 'kf_d_t' not in state:
-                    continue
-                # perturb back
-                p.data.add_(state['kf_d_t'], alpha = -gamma)
-                if self.compute_grad:
-                    if hasattr(p, 'private_grad'):
-                        p.private_grad.div_(self.scaling_factor)
-                    elif p.grad is not None:
-                        p.grad.div_(self.scaling_factor)
-        return loss
-            
-
-    def step(self, closure=None):
-        """Performs a single optimization step.
-        Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
-        """
-
-        for group in self.param_groups:
-            kappa = group['kappa']
-            for p in group['params']:
-                has_private_grad = False
-                if not p.requires_grad:
-                    continue
-                if hasattr(p, 'private_grad'):
-                    grad = p.private_grad
-                    has_private_grad = True
-                elif p.grad is not None:
-                    grad = p.grad
-                else:
-                    continue
-                if self.compute_grad:
-                    grad.div_(1+1/self.scaling_factor)
-                state = self.state[p]
-                if 'kf_d_t' not in state:
-                    state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
-                    state['kf_m_t'] = grad.clone().to(p.data)
-                state['kf_m_t'].lerp_(grad, weight = kappa)
-                if has_private_grad:
-                    p.private_grad = state['kf_m_t'].clone().to(p.data)
-                else:
-                    p.grad = state['kf_m_t'].clone().to(p.data)
-                state['kf_d_t'] = -p.data.clone().to(p.data)
-        loss = self.optimizer.step(closure)
-        for group in self.param_groups:
-            for p in group['params']:
-                if not p.requires_grad:
-                    continue
-                self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
-        return loss

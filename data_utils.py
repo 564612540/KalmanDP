@@ -142,13 +142,17 @@ def generate_glue(dataset, data_path='./data', batch_size = 32, max_sequence_len
     eval_dataloader = DataLoader(tokenized_datasets["validation_matched" if dataset == "mnli" else "validation"], batch_size=batch_size, collate_fn=data_collator)
     return train_dataloader, eval_dataloader, tokenizer, label_to_id, num_labels
 
-def generate_imgnet1k(batchsize):
+def generate_imgnet1k(batchsize, datapath):
+    torch.multiprocessing.set_sharing_strategy('file_system')
+    torch.multiprocessing.set_start_method("spawn")
     trans_imgnet =  transforms.Compose([transforms.Resize(256), transforms.CenterCrop(224), transforms.ToTensor(), transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
     trans_imgnet_train = transforms.Compose([transforms.Resize(256),ImageNetPolicy(), transforms.RandomHorizontalFlip(), transforms.RandomResizedCrop(224), transforms.ToTensor(), transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
-    dataset_train = datasets.ImageNet('./data/imgnet1k', split='train', transform = trans_imgnet_train)
-    dataset_test = datasets.ImageNet('./data/imgnet1k', split='val', transform=trans_imgnet)
-    train_loader = DataLoader(dataset_train,batch_size=batchsize,shuffle=True,drop_last=True, pin_memory = True,num_workers=4)
-    test_loader = DataLoader(dataset_test,batch_size=batchsize,shuffle=False,drop_last=False, pin_memory = True)
+    dataset_train = datasets.ImageNet(datapath+'/imgnet1k', split='train', transform = trans_imgnet_train)
+    dataset_test = datasets.ImageNet(datapath+'/imgnet1k', split='val', transform=trans_imgnet)
+    def train_loader():
+        return DataLoader(dataset_train,batch_size=batchsize,shuffle=True,drop_last=True, pin_memory = True,num_workers=4)
+    def test_loader():
+        return DataLoader(dataset_test,batch_size=batchsize,shuffle=False,drop_last=False, pin_memory = True)
     return train_loader, test_loader
 
 def generate_Mnist(batchsize, datapath):
@@ -161,7 +165,7 @@ def generate_Mnist(batchsize, datapath):
 
 
 def generate_Cifar(batchsize, dataset, model, data_path):
-    if model == 'cnn5':
+    if model == 'cnn5' or model.startswith('wrn'):
         size = 32
     else:
         size = 224
