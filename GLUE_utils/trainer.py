@@ -452,6 +452,7 @@ class Trainer(transformers.Trainer):
         """
         labels = inputs.pop("labels")
         outputs = model(**inputs)  # This should not contain `loss`.
+        inputs['labels'] = labels
         logits = outputs[0]
         if isinstance(outputs, SequenceClassifierOutput):
             outputs = (logits,)
@@ -503,7 +504,31 @@ class Trainer(transformers.Trainer):
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
-        eval_dataloader = self.get_eval_dataloader(eval_dataset)
+        # eval_dataloader = self.get_eval_dataloader(eval_dataset)
+        # if eval_dataloader.batch_size is None:
+        data_collator = self.data_collator
+        eval_dataset = self.eval_dataset
+        if is_datasets_available():
+            import datasets
+        if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
+            eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="evaluation")
+
+        eval_sampler = self._get_eval_sampler(eval_dataset)
+
+        eval_dataloader = DataLoader(
+            eval_dataset,
+            sampler=eval_sampler,
+            batch_size=self.args.eval_batch_size,
+            collate_fn=data_collator,
+            drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
+            pin_memory=self.args.dataloader_pin_memory,
+        )
+        print(eval_dataloader.batch_size)
+        # while eval_dataloader.batch_size is None:
+        #     eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self.prediction_loop(eval_dataloader, description="Evaluation")
 

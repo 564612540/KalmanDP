@@ -63,3 +63,5 @@ class TrainingArguments(transformers.TrainingArguments):
     def __post_init__(self):
         super(TrainingArguments, self).__post_init__()
         self.lr_decay = self.lr_decay.lower() in true_tags  # noqa
+        if self.n_gpu <= 1:
+            self.local_rank = -1

@@ -21,15 +21,15 @@ from transformers import GlueDataset
 from transformers import HfArgumentParser, set_seed
 
 from fastDP import PrivacyEngine
-from .GLUE_utils.common import true_tags
-from .GLUE_utils.compiled_args import PrivacyArguments, TrainingArguments
-from .GLUE_utils.dataset import FewShotDataset
-from .GLUE_utils.models import (
+from GLUE_utils.common import true_tags
+from GLUE_utils.compiled_args import PrivacyArguments, TrainingArguments
+from GLUE_utils.dataset import FewShotDataset
+from GLUE_utils.models import (
     BertForPromptFinetuning, RobertaForPromptFinetuning, AlbertForPromptFinetuning, DistilBertForPromptFinetuning,
     resize_token_type_embeddings
 )
-from .GLUE_utils.processors import num_labels_mapping, output_modes_mapping, compute_metrics_mapping, bound_mapping
-from .GLUE_utils.trainer import Trainer
+from GLUE_utils.processors import num_labels_mapping, output_modes_mapping, compute_metrics_mapping, bound_mapping
+from GLUE_utils.trainer import Trainer
 from KFOptimizer import KFOptimizer
 
 logger = logging.getLogger(__name__)

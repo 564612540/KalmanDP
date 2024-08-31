@@ -9,6 +9,10 @@ Key requirements:
 * torchvision
 * timm
 * transformers
+* accelerate
+* sentence-transformers
+* fire
+* ml_swissknife
 
 Provides KFOptimizer class:
 ```python

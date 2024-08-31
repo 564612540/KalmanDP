@@ -4,7 +4,7 @@ import os
 
 import fire
 
-from .GLUE_utils import common
+from GLUE_utils import common
 
 
 def _get_command(
@@ -70,6 +70,7 @@ def _get_command(
     # Epochs chosen roughly to match e2e number of updates. We didn't hyperparameter tune on classification tasks :)
     if kf:
         cmd = f'''
+    CUDA_VISIBLE_DEVICES=0 \
     python run_classification_kf.py \
     --task_name {task_name} \
     --data_dir {data_dir} \
@@ -97,11 +98,12 @@ def _get_command(
     --do_train --do_eval \
     --first_sent_limit 200 --other_sent_limit 200 --truncate_head yes \
     --attention_only {attention_only} --bias_only {bias_only} --static_lm_head {static_lm_head} --static_embedding {static_embedding} \
-    --randomly_initialize {randomly_initialize} \
+    --randomly_initialize {randomly_initialize} --local_rank -1 \
     --kf --kappa {kappa} --gamma {gamma}
     '''
     else:
-        cmd = f'''
+        cmd = f''' 
+    CUDA_VISIBLE_DEVICES=0 \
     python run_classification_kf.py \
     --task_name {task_name} \
     --data_dir {data_dir} \
@@ -129,7 +131,7 @@ def _get_command(
     --do_train --do_eval \
     --first_sent_limit 200 --other_sent_limit 200 --truncate_head yes \
     --attention_only {attention_only} --bias_only {bias_only} --static_lm_head {static_lm_head} --static_embedding {static_embedding} \
-    --randomly_initialize {randomly_initialize}
+    --randomly_initialize {randomly_initialize} --local_rank -1 
     '''
     return cmd
 
