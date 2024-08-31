@@ -1,5 +1,7 @@
 log/
 script/
+data/
+unused/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

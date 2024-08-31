@@ -3,7 +3,7 @@ from torch.optim.optimizer import Optimizer, required
 import torch.autograd as ta
 
 class KFOptimizer(Optimizer):
-    def __init__(self, params, optimizer:Optimizer, kappa = 0.9, gamma = 1):
+    def __init__(self, params, optimizer:Optimizer, kappa = 0.9, gamma = 1.0):
         '''
         # wrapping up the optimizer with
         optimizer = KFOptimizer(model.parameters(), optimizer, sigma_H, sigma_g)
