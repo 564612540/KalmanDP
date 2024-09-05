@@ -208,6 +208,7 @@ class RobertaForPromptFinetuning(BertPreTrainedModel):
         attention_mask=None,
         mask_pos=None,
         labels=None,
+        **kwargs,
     ):
         """
         Args:
@@ -231,7 +232,8 @@ class RobertaForPromptFinetuning(BertPreTrainedModel):
         # Pick the entries that correspond to labels.
         sequence_mask_output = sequence_output[torch.arange(batch_size), mask_pos]
         # ---
-
+        # print(sequence_mask_output)
+        # quit()
         # # Get <mask> token representation
         # sequence_output, pooled_output = outputs[:2]
         # sequence_mask_output = sequence_output[torch.arange(sequence_output.size(0)), mask_pos]

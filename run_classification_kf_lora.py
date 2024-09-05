@@ -34,6 +34,7 @@ from KFOptimizer import KFOptimizer
 from peft import (
     get_peft_model,
     LoraConfig,
+    inject_adapter_in_model
 )
 
 logger = logging.getLogger(__name__)
@@ -616,11 +617,26 @@ def main():
         if not model_args.static_lm_head and hasattr(model, 'lm_head'):
             model.lm_head.requires_grad_(True)
     elif model_args.lora:
+        # model.enable_input_requires_grad()
+        # model.requires_grad_(True)
         peft_config = LoraConfig(task_type="SEQ_CLS", inference_mode=False, r=model_args.lora_rank, lora_alpha=model_args.lora_rank*2, lora_dropout=0.02)
-        model = get_peft_model(model, peft_config)
-        model.requires_grad_(True)
-        if model_args.static_embedding:
-            model.get_input_embeddings().requires_grad_(False)
+        peft_config_head = LoraConfig(task_type="SEQ_CLS", target_modules='all-linear', inference_mode=False, r=model_args.lora_rank*2, lora_alpha=model_args.lora_rank*2, lora_dropout=0.02)
+        base_model = model
+        def make_inputs_require_grad(module, input, output):
+            output.requires_grad_(True)
+        model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
+        # model.lm_head.enable_input_requires_grad()
+        # model.roberta.enable_input_requires_grad()
+        model.roberta = inject_adapter_in_model(peft_config, model.roberta)
+        model.lm_head = inject_adapter_in_model(peft_config_head, model.lm_head)
+        # model = get_peft_model(model, peft_config)
+        for name, param in model.named_parameters():
+            if 'lora' in name or 'classifier' in name or 'lm_head' in name:
+                param.requires_grad_(True)
+                print("This one:"+name)
+        if model_args.static_lm_head and hasattr(model, 'lm_head'):
+            model.lm_head.requires_grad_(False)
+        # model.requires_grad_(True)
     else:
         model.requires_grad_(True)
         if model_args.static_embedding:
@@ -656,16 +672,24 @@ def main():
 
     # Pass dataset and argument information to the model
     if data_args.prompt:
-        model.label_word_list = torch.tensor(train_dataset.label_word_list).long().cuda()
+        if model_args.lora:
+            base_model.label_word_list = torch.tensor(train_dataset.label_word_list).long().cuda()
+        else:
+            model.label_word_list = torch.tensor(train_dataset.label_word_list).long().cuda()
         print(f" | Classification label_word_list: {model.label_word_list}")
         print(f"   converted words: {tokenizer.convert_ids_to_tokens(model.label_word_list)}")
     if output_modes_mapping[data_args.task_name] == 'regression':
         # lower / upper bounds
         model.lb, model.ub = bound_mapping[data_args.task_name]
         print(f" | Regression lb: {model.lb}, ub: {model.ub}")
-    model.model_args = model_args
-    model.data_args = data_args
-    model.tokenizer = tokenizer
+    if model_args.lora:
+        base_model.model_args = model_args
+        base_model.data_args = data_args
+        base_model.tokenizer = tokenizer
+    else:
+        model.model_args = model_args
+        model.data_args = data_args
+        model.tokenizer = tokenizer
 
     # Build metric
     def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
