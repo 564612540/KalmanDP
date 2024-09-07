@@ -619,8 +619,8 @@ def main():
     elif model_args.lora:
         # model.enable_input_requires_grad()
         # model.requires_grad_(True)
-        peft_config = LoraConfig(task_type="SEQ_CLS", inference_mode=False, r=model_args.lora_rank, lora_alpha=model_args.lora_rank*2, lora_dropout=0.02)
-        peft_config_head = LoraConfig(task_type="SEQ_CLS", target_modules='all-linear', inference_mode=False, r=model_args.lora_rank*2, lora_alpha=model_args.lora_rank*2, lora_dropout=0.02)
+        peft_config = LoraConfig(task_type="SEQ_CLS", inference_mode=False, r=model_args.lora_rank, lora_alpha=model_args.lora_rank*2, lora_dropout=0.01)
+        # peft_config_head = LoraConfig(task_type="SEQ_CLS", target_modules='all-linear', inference_mode=False, r=model_args.lora_rank*2, lora_alpha=model_args.lora_rank*2, lora_dropout=0.02)
         base_model = model
         def make_inputs_require_grad(module, input, output):
             output.requires_grad_(True)
@@ -628,12 +628,12 @@ def main():
         # model.lm_head.enable_input_requires_grad()
         # model.roberta.enable_input_requires_grad()
         model.roberta = inject_adapter_in_model(peft_config, model.roberta)
-        model.lm_head = inject_adapter_in_model(peft_config_head, model.lm_head)
+        # model.lm_head = inject_adapter_in_model(peft_config_head, model.lm_head)
         # model = get_peft_model(model, peft_config)
         for name, param in model.named_parameters():
             if 'lora' in name or 'classifier' in name or 'lm_head' in name:
                 param.requires_grad_(True)
-                print("This one:"+name)
+                # print("This one:"+name)
         if model_args.static_lm_head and hasattr(model, 'lm_head'):
             model.lm_head.requires_grad_(False)
         # model.requires_grad_(True)
@@ -733,6 +733,12 @@ def main():
          'weight_decay': training_args.weight_decay},
         {'params': [p for n, p in named_params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
+    # if model_args.lora:
+    #     print('changing to require grad')
+    #     for group in optimizer_grouped_parameters:
+    #         for p in group['params']:
+    #             p.requires_grad_(True)
+    #             print(p.requires_grad)
     optimizer = trainer.optimizer = torch.optim.AdamW(
         optimizer_grouped_parameters,
         lr=training_args.learning_rate,
@@ -748,8 +754,13 @@ def main():
         trainer.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(trainer.optimizer, lambda _: 1.)
     
     if training_args.kf:
+        print("Apply KF optimizer")
         optimizer = KFOptimizer(optimizer_grouped_parameters, optimizer,training_args.kappa, training_args.gamma)
         trainer.optimizer = optimizer
+        # for group in trainer.optimizer.param_groups:
+        #     for p in group['params']:
+        #         if p.requires_grad:
+        #             print(p)
 
     if privacy_args.non_private:
         privacy_args.noise_multiplier = 0.
