@@ -644,7 +644,7 @@ class Trainer:
     def compute_loss(self, model, inputs):
         labels = inputs.pop('labels')
         outputs = model(**inputs)
-
+        inputs['labels'] = labels
         # Save past state if it exists
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
