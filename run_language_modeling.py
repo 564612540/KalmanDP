@@ -35,12 +35,12 @@ from E2E_utils.compiled_args import (DataTrainingArguments, ModelArguments, Priv
 from E2E_utils.misc import get_all_datasets, get_prompt_dataset
 from E2E_utils.trainer import Trainer
 from KFOptimizer import KFOptimizer
+import tqdm
 
+# from transformers.utils import logging as tlogging
 logger = logging.getLogger(__name__)
-
 MODEL_CONFIG_CLASSES = list(MODEL_WITH_LM_HEAD_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
-
 
 def main():
     parser = HfArgumentParser(

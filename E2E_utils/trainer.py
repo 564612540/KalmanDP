@@ -28,6 +28,8 @@ from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_pt_utils import distributed_broadcast_scalars
 from transformers.trainer_utils import (EvalPrediction, EvaluationStrategy, IntervalStrategy, PREFIX_CHECKPOINT_DIR,
                                         PredictionOutput, TrainOutput, set_seed)
+
+import logging as lgg
 from transformers.utils import logging
 from transformers.deepspeed import deepspeed_init
 import deepspeed
@@ -38,6 +40,23 @@ from E2E_utils.compiled_args import (DataTrainingArguments, ModelArguments, Priv
 
 logger = logging.get_logger(__name__)
 
+# logger.setLevel(logging.ERROR)
+
+class TqdmLoggingHandler(lgg.StreamHandler):
+    """Avoid tqdm progress bar interruption by logger's output to console"""
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            tqdm.write(msg, end=self.terminator)
+        except RecursionError:
+            raise
+        except Exception:
+            self.handleError(record)
+
+tqdm_handeler = TqdmLoggingHandler()
+tqdm_handeler.setLevel(logging.ERROR)
+logger.addHandler(TqdmLoggingHandler())
 
 class Trainer:
     """
@@ -801,8 +820,15 @@ class Trainer:
             "eval": eval_output.metrics,
             "val": val_output.metrics,
             "epoch": epoch,
-            "lr": [pg["lr"] for pg in self.optimizer.param_groups],
         }
+        
+        if hasattr(self.optimizer, 'optimizer'):
+            lr_me ={
+                "lr": [pg["lr"] for pg in self.optimizer.optimizer.param_groups],
+            }
+        else:
+            lr_me = {"lr": [pg["lr"] for pg in self.optimizer.param_groups]}
+        metrics = {**metrics, **lr_me}
 
         if hasattr(self.optimizer, 'privacy_engine'):
             pe = self.optimizer.privacy_engine
