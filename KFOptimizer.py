@@ -32,7 +32,6 @@ class KFOptimizer(Optimizer):
     def prestep(self, closure=required):
         loss = None
         for group in self.param_groups:
-            kappa = group['kappa']
             gamma = group['gamma']
             break
         if self.compute_grad:
@@ -40,16 +39,11 @@ class KFOptimizer(Optimizer):
                 loss = closure() # compute grad
         # totoal_grad = 0
         for group in self.param_groups:
-            # kappa = group['kappa']
             gamma = group['gamma']
             for p in group['params']:
-                # print(' pgrad: ', str(p.grad is None), str(hasattr(p, 'private_grad')), str(p.requires_grad), flush=True)
-                # if p.grad is None:
-                #     continue
                 state = self.state[p]
                 if 'kf_d_t' not in state:
                     continue
-                # totoal_grad += 1
                 # perturb
                 p.data.add_(state['kf_d_t'], alpha = gamma)
                 if self.compute_grad:
@@ -59,18 +53,14 @@ class KFOptimizer(Optimizer):
                         p.grad.mul_(self.scaling_factor)
                     else:
                         raise RuntimeError("Must have either grad or private_grad!")
-        # print("total_grad: ", totoal_grad, flush=True)
         with torch.enable_grad():
             if self.compute_grad:
                 closure()
             else:
                 loss = closure()
         for group in self.param_groups:
-            # kappa = group['kappa']
             gamma = group['gamma']
             for p in group['params']:
-                # if p.grad is None:
-                #     continue
                 state = self.state[p]
                 if 'kf_d_t' not in state:
                     continue
@@ -91,14 +81,10 @@ class KFOptimizer(Optimizer):
                 and returns the loss.
         """
         scaling_factor = 0.0
-        # total_grad = 0
         for group in self.param_groups:
             kappa = group['kappa']
             for p in group['params']:
                 has_private_grad = False
-                # print("Decide has grad / private_grad"+str(p.grad is not None)+str(hasattr(p, 'private_grad')),flush=True)
-                # if p.grad is None:
-                #     continue
                 if hasattr(p, 'private_grad'):
                     grad = p.private_grad
                     has_private_grad = True
@@ -106,8 +92,6 @@ class KFOptimizer(Optimizer):
                     grad = p.grad
                 else:
                     continue
-                # print("Here!",flush=True)
-                # total_grad += 1
                 if self.compute_grad:
                     grad.div_(1+1/self.scaling_factor)
                 state = self.state[p]
@@ -121,20 +105,15 @@ class KFOptimizer(Optimizer):
                     p.grad = state['kf_m_t'].clone().to(p.data)
                     scaling_factor += p.grad.norm().pow(2)
                 state['kf_d_t'] = -p.data.clone().to(p.data)
-        # print("Step total grad: ", total_grad, flush=True)
         if scaling_factor > 0 and not has_private_grad:
             scaling_factor = scaling_factor.sqrt()
             for group in self.param_groups:
                 for p in group['params']:
-                    # if p.grad is None:
-                    #     continue
                     if p.grad is not None:
                         p.grad.div_(scaling_factor)
         loss = self.optimizer.step(closure)
         for group in self.param_groups:
             for p in group['params']:
-                # if p.grad is None:
-                #     continue
                 if p.grad is not None:
                     self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
         return loss
