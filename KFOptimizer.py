@@ -1,6 +1,8 @@
 import torch
 from torch.optim.optimizer import Optimizer, required
 import torch.autograd as ta
+from collections import defaultdict
+from typing import Callable, List, Optional, Union
 
 class KFOptimizer(Optimizer):
     def __init__(self, params, optimizer:Optimizer, kappa = 0.9, gamma = 1.0):
@@ -118,8 +120,134 @@ class KFOptimizer(Optimizer):
                     self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
         return loss
 
-
 class KFOptimizer_2(Optimizer):
+    def __init__(self, optimizer:Optimizer, kappa = 0.7, gamma = 0.5):
+        '''
+        # wrapping up the optimizer with
+        optimizer = KFOptimizer_2(optimizer, kappa, gamma)
+        '''
+        self.scaling_factor = 1.0
+        self.compute_grad_at_original = False
+        if gamma == 0 or abs(gamma - (1-kappa)/kappa) <1e-3:
+            gamma = (1-kappa)/kappa
+        else:
+            self.scaling_factor = (1-kappa)/(gamma*kappa)#(gamma*kappa+kappa-1)/(1-kappa)
+            self.compute_grad_at_original = True
+        self.gamma = gamma
+        self.kappa = kappa
+        self.optimizer = optimizer
+
+    @property
+    def param_groups(self) -> List[dict]:
+        """
+        Returns a list containing a dictionary of all parameters managed by the optimizer.
+        """
+        return self.original_optimizer.param_groups
+
+    @param_groups.setter
+    def param_groups(self, param_groups: List[dict]):
+        """
+        Updates the param_groups of the optimizer.
+        """
+        self.original_optimizer.param_groups = param_groups
+
+    @property
+    def state(self) -> defaultdict:
+        """
+        Returns a dictionary holding current optimization state.
+        """
+        return self.original_optimizer.state
+
+    @state.setter
+    def state(self, state: defaultdict):
+        """
+        Updates the state of the optimizer.
+        """
+        self.original_optimizer.state = state
+
+    @property
+    def defaults(self) -> dict:
+        """
+        Returns a dictionary containing default values for optimization.
+        """
+        return self.original_optimizer.defaults
+
+    @defaults.setter
+    def defaults(self, defaults: dict):
+        """
+        Updates the defaults of the optimizer.
+        """
+        self.original_optimizer.defaults = defaults
+
+    def backward(self, closure_before_backward=required):
+        loss = None
+        if self.compute_grad_at_original:
+            with torch.enable_grad():
+                loss = (1-self.scaling_factor)*closure_before_backward() # compute grad
+        for group in self.param_groups:
+            for p in group['params']:
+                state = self.state[p]
+                if 'kf_d_t' not in state:
+                    continue
+                # perturb
+                p.data = p.data.add(state['kf_d_t'], alpha = self.gamma)
+        with torch.enable_grad():
+            if self.compute_grad_at_original:
+                loss += self.scaling_factor*closure_before_backward()
+            else:
+                loss = self.scaling_factor*closure_before_backward()
+        for group in self.param_groups:
+            for p in group['params']:
+                state = self.state[p]
+                if 'kf_d_t' not in state:
+                    continue
+                # perturb
+                p.data = p.data.add(state['kf_d_t'], alpha = -self.gamma)
+        return loss
+            
+
+    def step(self, closure: Optional[Callable[[], float]] = None):
+        """Performs a single optimization step.
+        Arguments:
+            closure (callable, optional): A closure that reevaluates the model
+                and returns the loss.
+        """
+        scaling_factor = 0.0
+        for group in self.param_groups:
+            for p in group['params']:
+                has_private_grad = False
+                if hasattr(p, 'private_grad'):
+                    grad = p.private_grad
+                    has_private_grad = True
+                elif p.grad is not None:
+                    grad = p.grad
+                else:
+                    continue
+                state = self.state[p]
+                if 'kf_d_t' not in state:
+                    state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
+                    state['kf_m_t'] = grad.clone().to(p.data)
+                state['kf_m_t'].lerp_(grad, weight = self.kappa)
+                if has_private_grad:
+                    p.private_grad = state['kf_m_t'].clone().to(p.data)
+                else:
+                    p.grad = state['kf_m_t'].clone().to(p.data)
+                    scaling_factor += p.grad.norm().pow(2)
+                state['kf_d_t'] = -p.data.clone().to(p.data)
+        if scaling_factor > 0 and not has_private_grad:
+            scaling_factor = scaling_factor.sqrt()
+            for group in self.param_groups:
+                for p in group['params']:
+                    if p.grad is not None:
+                        p.grad.div_(scaling_factor)
+        loss = self.optimizer.step(closure)
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is not None:
+                    self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
+        return loss
+
+class KFOptimizer_3(Optimizer):
     def __init__(self, params, optimizer:Optimizer, sigma_H=3e-6, sigma_g=1e-5):
         '''
         # wrapping up the optimizer with

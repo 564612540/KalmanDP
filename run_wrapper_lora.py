@@ -34,7 +34,7 @@ def _get_command(
     gamma
 ):
     task_name_to_factor = {
-        "sst-2": 1, "qnli": 2, "qqp": 6, "mnli": 6,
+        "sst-2": 1, "qnli": 2, "qqp": 4, "mnli": 4,
     }
     factor = task_name_to_factor[task_name]
 
@@ -94,7 +94,7 @@ def _get_command(
     --adam_epsilon 1e-08 \
     --weight_decay 0 \
     --max_seq_len 256 \
-    --evaluation_strategy steps --eval_steps {eval_steps} --evaluate_before_training True \
+    --evaluation_strategy epoch --eval_epochs {eval_steps} --evaluate_before_training True \
     --do_train --do_eval \
     --first_sent_limit 200 --other_sent_limit 200 --truncate_head yes \
     --attention_only {attention_only} --bias_only {bias_only} --static_lm_head {static_lm_head} --static_embedding {static_embedding} \
@@ -128,7 +128,7 @@ def _get_command(
     --adam_epsilon 1e-08 \
     --weight_decay 0 \
     --max_seq_len 256 \
-    --evaluation_strategy steps --eval_steps {eval_steps} --evaluate_before_training True \
+    --evaluation_strategy epoch --eval_epochs {eval_steps} --evaluate_before_training True \
     --do_train --do_eval \
     --first_sent_limit 200 --other_sent_limit 200 --truncate_head yes \
     --attention_only {attention_only} --bias_only {bias_only} --static_lm_head {static_lm_head} --static_embedding {static_embedding} \
@@ -155,8 +155,8 @@ def main(
     bias_only="no",
     static_lm_head="no",
     static_embedding="no",
-    physical_batch_size =40,
-    eval_steps=10,
+    physical_batch_size =50,
+    eval_steps=1,
     randomly_initialize="no",
     batch_size=None,
     num_train_epochs=None,
