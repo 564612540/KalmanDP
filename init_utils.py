@@ -219,7 +219,7 @@ class wanb_logger():
         })
         wandb.init(
             project='DPLPF',
-            entity='xinweiz-usc',
+            entity='entity-name',
             name=tag
         )
         wandb.config.update(run_config, allow_val_change=True)
