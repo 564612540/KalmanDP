@@ -28,8 +28,50 @@ class KFOptimizer(Optimizer):
             # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super(KFOptimizer, self).__init__(params, defaults)
 
-    def __setstate__(self, state):
-        super(KFOptimizer, self).__setstate__(state)
+    # def __setstate__(self, state):
+    #     super(KFOptimizer, self).__setstate__(state)
+
+    @property
+    def param_groups(self) -> List[dict]:
+        """
+        Returns a list containing a dictionary of all parameters managed by the optimizer.
+        """
+        return self.original_optimizer.param_groups
+
+    @param_groups.setter
+    def param_groups(self, param_groups: List[dict]):
+        """
+        Updates the param_groups of the optimizer.
+        """
+        self.original_optimizer.param_groups = param_groups
+
+    @property
+    def state(self) -> defaultdict:
+        """
+        Returns a dictionary holding current optimization state.
+        """
+        return self.original_optimizer.state
+
+    @state.setter
+    def state(self, state: defaultdict):
+        """
+        Updates the state of the optimizer.
+        """
+        self.original_optimizer.state = state
+
+    @property
+    def defaults(self) -> dict:
+        """
+        Returns a dictionary containing default values for optimization.
+        """
+        return self.original_optimizer.defaults
+
+    @defaults.setter
+    def defaults(self, defaults: dict):
+        """
+        Updates the defaults of the optimizer.
+        """
+        self.original_optimizer.defaults = defaults
 
     def prestep(self, closure=required):
         loss = None
