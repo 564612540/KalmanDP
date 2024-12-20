@@ -181,7 +181,22 @@ def generate_Cifar(batchsize, dataset, model, data_path):
     test_loader = DataLoader(dataset_test,batch_size=batchsize*4,shuffle=False,drop_last=False, pin_memory = True)
     return train_loader, test_loader
 
-# def generate_Imagenet(batchsize, dataset):
+def generate_Cifar_dist(batchsize, dataset, model, data_path):
+    if model == 'cnn5' or model.startswith('wrn'):
+        size = 32
+    else:
+        size = 224
+    trans_cifar = transforms.Compose([transforms.Resize(size), transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616))])#transforms.Resize(224)
+    trans_cifar_train = transforms.Compose([transforms.Resize(size),CIFAR10Policy(), transforms.RandomHorizontalFlip(), transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616))])
+    if dataset == 'cifar100':
+        dataset_train = datasets.CIFAR100(data_path+'/cifar100', train=True, download=True, transform=trans_cifar_train)
+        dataset_test = datasets.CIFAR100(data_path+'/cifar100', train=False, download=True, transform=trans_cifar)
+    else:
+        dataset_train = datasets.CIFAR10(data_path+'/cifar10', train=True, download=True, transform=trans_cifar_train)
+        dataset_test = datasets.CIFAR10(data_path+'/cifar10', train=False, download=True, transform=trans_cifar)
+    # train_loader = DataLoader(dataset_train,batch_size=batchsize,shuffle=True,drop_last=False, pin_memory = True,num_workers=4)
+    test_loader = DataLoader(dataset_test,batch_size=batchsize*4,shuffle=False,drop_last=False, pin_memory = True)
+    return dataset_train, test_loader
 
 
 from PIL import Image, ImageEnhance, ImageOps
