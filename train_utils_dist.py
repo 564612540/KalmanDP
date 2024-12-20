@@ -25,6 +25,8 @@ def train(model, train_dl, optimizer, criterion, log_file, epoch = -1, log_frequ
             loss, predict = optimizer.prestep(closure)
         else:
             loss, predict = closure()
+
+        model.step()
         
         train_loss = loss.item()
         _, predicted = predict.max(1)
@@ -36,12 +38,12 @@ def train(model, train_dl, optimizer, criterion, log_file, epoch = -1, log_frequ
         del loss
         del predict
 
-        if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
-            if lr_scheduler is not None:
-                lr_scheduler.step()
-            optimizer.step()
-            # optimizer.prestep()
-            optimizer.zero_grad()
+        # if ((t + 1) % acc_step == 0) or ((t + 1) == len(train_dl)):
+        #     if lr_scheduler is not None:
+        #         lr_scheduler.step()
+        #     optimizer.step()
+        #     # optimizer.prestep()
+        #     optimizer.zero_grad()
 
         if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
             print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
