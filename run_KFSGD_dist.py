@@ -2,7 +2,7 @@ import torch
 import math
 
 import torch.distributed
-from KFOptimizer import KFOptimizer
+from KFOptimizer import wrap_optimizer
 from train_utils_dist import train, test
 from init_utils_dist import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine_Distributed_extending
@@ -60,7 +60,8 @@ if __name__ == '__main__':
         lrscheduler = None
 
     if args.kf:
-        optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
+        optimizer = wrap_optimizer(optimizer, kappa=args.kappa, gamma=args.gamma)
+        # optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
     
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     if args.clipping:

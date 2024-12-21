@@ -1,6 +1,6 @@
 import torch
 import math
-from KFOptimizer import KFOptimizer
+from KFOptimizer import wrap_optimizer
 from train_utils import noisy_train, train, test
 from init_utils import base_parse_args, task_init, logger_init
 from fastDP import PrivacyEngine, PrivacyEngine_Distributed_extending
@@ -8,11 +8,13 @@ from fastDP import PrivacyEngine, PrivacyEngine_Distributed_extending
 import argparse
 import warnings
 import gc
+import os
 
 if __name__ == '__main__':
     warnings.filterwarnings("ignore")
+    os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
     torch.manual_seed(42)
-    parser = argparse.ArgumentParser(description='LP DPSGD')
+    parser = argparse.ArgumentParser(description='DiSK')
     parser = base_parse_args(parser)
     args = parser.parse_args()
     train_dl, test_dl, model, device, sample_size, acc_step, noise = task_init(args)
@@ -54,7 +56,7 @@ if __name__ == '__main__':
         lrscheduler = None
 
     if args.kf:
-        optimizer = KFOptimizer(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
+        optimizer = wrap_optimizer(optimizer, kappa=args.kappa, gamma=args.gamma)#KFOptimizer(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
     
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     if args.clipping:

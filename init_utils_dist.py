@@ -117,7 +117,6 @@ def logger_init(args, noise, steps_per_epoch, type = 'file'):
         return log_wanb
     else:
         raise RuntimeError('incorrect logger')
-    
 
 class file_logger():
     def __init__(self, path, time_num, item_list, steps_per_epoch, heading = None):
