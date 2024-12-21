@@ -1,13 +1,14 @@
 {
-  "train_batch_size": 1024,
-  "train_micro_batch_size_per_gpu": 32,
-  "steps_per_print": 2000,
+  "train_batch_size": 2000,
+  "train_micro_batch_size_per_gpu": 100,
+  "steps_per_print": 20,
   "prescale_gradients": false,
+  "zero_allow_untested_optimizer": true,
   "bf16": {
       "enabled": false
   },
   "fp16": {
-      "enabled": true,
+      "enabled": false,
       "fp16_master_weights_and_grads": false,
       "loss_scale": 1.0,
       "loss_scale_window": 1000,
@@ -17,7 +18,7 @@
   },
   "wall_clock_breakdown": false,
   "zero_optimization": {
-      "stage": 1,
+      "stage": 3,
       "allgather_partitions": true,
       "reduce_scatter": true,
       "allgather_bucket_size": 50000000,

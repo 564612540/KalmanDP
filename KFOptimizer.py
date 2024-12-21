@@ -22,8 +22,10 @@ class KFOptimizer(Optimizer):
         else:
             self.scaling_factor = (gamma*kappa+kappa-1)/(1-kappa)
             self.compute_grad = True
-        defaults = dict(kappa = kappa, gamma=gamma)
-        self.optimizer = optimizer
+        defaults = optimizer.defaults
+        defaults['kappa'] = kappa
+        defaults['gamma'] = gamma
+        self.original_optimizer = optimizer
         # if nesterov and (momentum <= 0 or dampening != 0):
             # raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super(KFOptimizer, self).__init__(params, defaults)
@@ -155,7 +157,7 @@ class KFOptimizer(Optimizer):
                 for p in group['params']:
                     if p.grad is not None:
                         p.grad.div_(scaling_factor)
-        loss = self.optimizer.step(closure)
+        loss = self.original_optimizer.step(closure)
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is not None:

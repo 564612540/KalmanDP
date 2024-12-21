@@ -25,11 +25,13 @@ def base_parse_args(parser):
     parser.add_argument('--load_path', default=None, type=str, help='load checkpoint if specified')
     parser.add_argument('--save_path', default=None, type=str, help='save checkpoint is specified')
     parser.add_argument('--save_freq', default=999, type=int, help='checkpoint saving frequency')
+    parser.add_argument('--local_rank', default=-1, type=int, help='local_rank from deepspeed')
+
 
     parser.add_argument('--data', default='cifar100', type=str, help='dataset (cifar10, cifar100)')
     parser.add_argument('--data_path', default='../data', type=str, help='dataset path')
-    parser.add_argument('--bs', default=256, type=int, help='batch size')
-    parser.add_argument('--mnbs', default=32, type=int, help='mini batch size')
+    parser.add_argument('--logi_bs', default=256, type=int, help='batch size')
+    parser.add_argument('--gpu_bs', default=32, type=int, help='mini batch size')
     parser.add_argument('--model', default = 'vit_small_patch16_224', type=str, help='trained model')
     parser.add_argument('--pretrained', action='store_true', help='use pre-trained weights')
 
@@ -41,8 +43,8 @@ def base_parse_args(parser):
     parser.add_argument('--scheduler',action="store_true" ,help='use 1 cycle lr scheduler')
     parser.add_argument('--kf',action="store_true" ,help='use kalman filter')
     parser.add_argument('--record',action="store_true" ,help='record gamma for KFAdamBC')
-    parser.add_argument('--kappa', default=1.5, type=float, help='sigma ratio')
-    parser.add_argument('--gamma', default=-1, type=float, help='perturbation stepsize, default: -1 (dynamic according to k_t)')
+    parser.add_argument('--kappa', default=0.7, type=float, help='sigma ratio')
+    parser.add_argument('--gamma', default=0.5, type=float, help='perturbation stepsize, default: -1 (dynamic according to k_t)')
 
     # DP parameters
     parser.add_argument('--clipping', action="store_true", help="use gradient clipping")
@@ -62,11 +64,11 @@ def task_init(args):
     model = None
     if args.data == 'cifar10':
         num_classes = 10
-        train_dl, test_dl = generate_Cifar_dist(args.mnbs, args.data, args.model, args.data_path)
+        train_dl, test_dl = generate_Cifar_dist(args.gpu_bs, args.data, args.model, args.data_path)
         sample_size = 50000
     elif args.data == 'cifar100':
         num_classes = 100
-        train_dl, test_dl = generate_Cifar_dist(args.mnbs, args.data, args.model, args.data_path)
+        train_dl, test_dl = generate_Cifar_dist(args.gpu_bs, args.data, args.model, args.data_path)
         sample_size = 50000
     
     if model is None:
@@ -81,20 +83,20 @@ def task_init(args):
         else:
             model = timm.create_model(args.model, pretrained=args.pretrained, num_classes = num_classes)
     model = ModuleValidator.fix(model)
-    model.to('cuda:'+torch.distributed.get_rank())
-    if args.load_path is not None:
-        checkpoint = torch.load(args.load_path, map_location='cuda'+torch.distributed.get_rank())
-        model.load_state_dict(checkpoint['model'], strict = True)
+    # model.to('cuda:'+torch.distributed.get_rank())
+    # if args.load_path is not None:
+    #     checkpoint = torch.load(args.load_path, map_location='cuda'+torch.distributed.get_rank())
+    #     model.load_state_dict(checkpoint['model'], strict = True)
     
     if args.noise < 0 :
-        noise = get_noise_multiplier(target_delta=1.0/(sample_size)**1.1, target_epsilon=args.epsilon, sample_rate=args.bs/sample_size, epochs=args.epoch, accountant='prv')
+        noise = get_noise_multiplier(target_delta=1.0/(sample_size)**1.1, target_epsilon=args.epsilon, sample_rate=args.logi_bs/sample_size, epochs=args.epoch, accountant='prv')
     else:
         noise = args.noise
     if args.kf:
         c = (1-args.kappa)/(args.gamma*args.kappa)
         norm_factor = math.sqrt(c**2 + (1-c)**2)
         noise = noise/norm_factor
-    acc_step = args.bs//args.mnbs//torch.distributed.get_world_size()
+    acc_step = args.logi_bs//args.gpu_bs//torch.distributed.get_world_size()
     return train_dl, test_dl, model, device, sample_size, acc_step, noise
 
 def logger_init(args, noise, steps_per_epoch, type = 'file'):
@@ -106,9 +108,9 @@ def logger_init(args, noise, steps_per_epoch, type = 'file'):
         # datetime object containing current date and time
         log_file_path = '%s/%s_RANK_%d'%(args.log_path,args.tag,torch.distributed.get_rank())
         if hasattr(args, 'coef_file'):
-            log_file = file_logger(log_file_path, 2, ["acc","loss"], steps_per_epoch, heading = "Data=%s, Model=%s, E=%d, B=%d, lr=%-.6f, sigma=%-.6f, coef=%s"%(args.data, args.model, args.epoch, args.bs, args.lr, noise, args.coef_file))
+            log_file = file_logger(log_file_path, 2, ["acc","loss"], steps_per_epoch, heading = "Data=%s, Model=%s, E=%d, B=%d, lr=%-.6f, sigma=%-.6f, coef=%s"%(args.data, args.model, args.epoch, args.logi_bs, args.lr, noise, args.coef_file))
         else:
-            log_file = file_logger(log_file_path, 2, ["acc","loss"], steps_per_epoch, heading = "Data=%s, Model=%s, E=%d, B=%d, lr=%-.6f, sigma=%-.6f"%(args.data, args.model, args.epoch, args.bs, args.lr, noise))
+            log_file = file_logger(log_file_path, 2, ["acc","loss"], steps_per_epoch, heading = "Data=%s, Model=%s, E=%d, B=%d, lr=%-.6f, sigma=%-.6f"%(args.data, args.model, args.epoch, args.logi_bs, args.lr, noise))
         return log_file
     elif type == 'wandb' and HAS_WANDB:
         log_wanb = wanb_logger(args, noise, steps_per_epoch)
@@ -158,14 +160,14 @@ class file_logger():
 class wanb_logger():
     def __init__(self, args, noise, steps_per_epoch):
         self.epoch_per_step = 1.0/steps_per_epoch
-        tag = args.tag+'_'+args.data+'_'+str(args.epsilon)+'_'+str(args.lr)+'_'+str(args.bs)+'_'+str(args.epoch)
+        tag = args.tag+'_'+args.data+'_'+str(args.epsilon)+'_'+str(args.lr)+'_'+str(args.logi_bs)+'_'+str(args.epoch)
         run_config = dict(vars(args))
         run_config.update({
             "noise": noise,
             "tag": tag,
         })
         wandb.init(
-            project='DPLPF',
+            project='DiSK_dist',
             entity='entity-name',
             name=tag
         )

@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import torch.distributed
 from tqdm import tqdm
 from tqdm._utils import _term_move_up
 import torch.autograd as ta
@@ -58,8 +59,12 @@ def test(model, test_dl, criterion, log_file, epoch = -1, **kwargs):
     correct = 0
     total = 0
     criterion = torch.nn.CrossEntropyLoss()
+    if torch.distributed.get_rank == 0:
+        test_dl_iter = tqdm(test_dl)
+    else:
+        test_dl_iter = test_dl
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(test_dl):
+        for batch_idx, (inputs, targets) in enumerate(test_dl_iter):
             inputs, targets = inputs.to(model.local_rank), targets.to(model.local_rank)
             outputs = model(inputs)
             if not isinstance(outputs, torch.Tensor):
@@ -70,6 +75,8 @@ def test(model, test_dl, criterion, log_file, epoch = -1, **kwargs):
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
+            if torch.distributed.get_rank == 0:
+                print('testing batch: %d' % (batch_idx))
     print('Epoch: ', epoch, 'Test Loss: %.3f | Acc: %.3f%% (%d/%d)' % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
     print(" ")
     log_file.update([epoch, -1],[100.*correct/total, test_loss/(batch_idx+1)])

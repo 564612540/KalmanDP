@@ -178,7 +178,7 @@ def generate_Cifar(batchsize, dataset, model, data_path):
         dataset_train = datasets.CIFAR10(data_path+'/cifar10', train=True, download=True, transform=trans_cifar_train)
         dataset_test = datasets.CIFAR10(data_path+'/cifar10', train=False, download=True, transform=trans_cifar)
     train_loader = DataLoader(dataset_train,batch_size=batchsize,shuffle=True,drop_last=False, pin_memory = True,num_workers=4)
-    test_loader = DataLoader(dataset_test,batch_size=batchsize*4,shuffle=False,drop_last=False, pin_memory = True)
+    test_loader = DataLoader(dataset_test,batch_size=batchsize*4,shuffle=False,drop_last=False, pin_memory = True, num_workers=4)
     return train_loader, test_loader
 
 def generate_Cifar_dist(batchsize, dataset, model, data_path):
@@ -195,7 +195,7 @@ def generate_Cifar_dist(batchsize, dataset, model, data_path):
         dataset_train = datasets.CIFAR10(data_path+'/cifar10', train=True, download=True, transform=trans_cifar_train)
         dataset_test = datasets.CIFAR10(data_path+'/cifar10', train=False, download=True, transform=trans_cifar)
     # train_loader = DataLoader(dataset_train,batch_size=batchsize,shuffle=True,drop_last=False, pin_memory = True,num_workers=4)
-    test_loader = DataLoader(dataset_test,batch_size=batchsize*4,shuffle=False,drop_last=False, pin_memory = True)
+    test_loader = DataLoader(dataset_test,batch_size=batchsize*2,shuffle=False,drop_last=False, pin_memory = True, num_workers=2)
     return dataset_train, test_loader
 
 
