@@ -162,7 +162,7 @@ def wrap_optimizer(optimizer, kappa = 0.7, gamma = 0.5):
                         first_step = True
                         state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
                         state['kf_m_t'] = grad.clone().to(p.data)
-                    state['kf_m_t'].lerp_(grad, weight = kappa)
+                    state['kf_m_t'].lerp_(grad, weight = 1-kappa)
                     if has_private_grad:
                         p.private_grad = state['kf_m_t'].clone().to(p.data)
                     else:
