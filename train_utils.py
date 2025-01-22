@@ -46,7 +46,7 @@ def train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch
             optimizer.zero_grad()
 
         if (t+1)%(acc_step)== 0 or ((t + 1) == len(train_dl)):
-            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d)'% (epoch, t+1, train_loss, 100.*correct/total, correct, total))
+            print('Epoch: %d:%d Train Loss: %.3f | Acc: %.3f%% (%d/%d) | Mem_used: %d'% (epoch, t+1, train_loss, 100.*correct/total, correct, total, torch.cuda.memory_allocated(device)))
             if log_frequency>0 and ((t+1)%(acc_step*log_frequency) == 0 or t+1 == len(train_dl)):
                 log_file.update([epoch, t],[100.*correct/total, train_loss])
 def noisy_train(model, train_dl, optimizer, criterion, log_file, device = 'cpu', epoch = -1, noise = 0, log_frequency = -1, acc_step = 1, lr_scheduler = None):

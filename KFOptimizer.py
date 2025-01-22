@@ -1,5 +1,5 @@
 import torch
-from torch.optim.optimizer import Optimizer, required
+from torch.optim.optimizer import Optimizer, required, _use_grad_for_differentiable
 import torch.autograd as ta
 from collections import defaultdict
 from typing import Callable, List, Optional, Union
@@ -116,7 +116,7 @@ def wrap_optimizer(optimizer, kappa = 0.7, gamma = 0.5):
                     closure()
                 else:
                     loss = closure()
-            with torch.no_grad:
+            with torch.no_grad():
                 for group in self.param_groups:
                     # gamma = group['gamma']
                     for p in group['params']:
@@ -132,7 +132,7 @@ def wrap_optimizer(optimizer, kappa = 0.7, gamma = 0.5):
                                 p.grad.div_(self.scaling_factor)
             return loss
                 
-
+        @_use_grad_for_differentiable
         def step(self, closure=None):
             """Performs a single optimization step.
             Arguments:
@@ -143,52 +143,50 @@ def wrap_optimizer(optimizer, kappa = 0.7, gamma = 0.5):
             kappa = self.defaults['kappa']
             tmp_states = []
             first_step = False
-            with torch.no_grad():
-                for group in self.param_groups:
-                    # kappa = group['kappa']
-                    for p in group['params']:
-                        has_private_grad = False
-                        if hasattr(p, 'private_grad'):
-                            grad = p.private_grad
-                            has_private_grad = True
-                        elif p.grad is not None:
-                            grad = p.grad
-                        else:
-                            continue
-                        if self.compute_grad:
-                            grad.div_(1+1/self.scaling_factor)
-                        state = self.state[p]
-                        if 'kf_d_t' not in state:
-                            state = dict()
-                            first_step = True
-                            state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
-                            state['kf_m_t'] = grad.clone().to(p.data)
-                        state['kf_m_t'].lerp_(grad, weight = kappa)
-                        if has_private_grad:
-                            p.private_grad = state['kf_m_t'].clone().to(p.data)
-                        else:
-                            p.grad = state['kf_m_t'].clone().to(p.data)
-                            scaling_factor += p.grad.norm().pow(2)
-                        state['kf_d_t'] = -p.data.clone().to(p.data)
-                        if first_step:
-                            tmp_states.append(state)
-                if scaling_factor > 0 and not has_private_grad:
-                    scaling_factor = scaling_factor.sqrt()
-                    for group in self.param_groups:
-                        for p in group['params']:
-                            if p.grad is not None:
-                                p.grad.div_(scaling_factor)
-            loss = self.original_optimizer.step(closure)
-            with torch.no_grad():
+            for group in self.param_groups:
+                # kappa = group['kappa']
+                for p in group['params']:
+                    has_private_grad = False
+                    if hasattr(p, 'private_grad'):
+                        grad = p.private_grad
+                        has_private_grad = True
+                    elif p.grad is not None:
+                        grad = p.grad
+                    else:
+                        continue
+                    if self.compute_grad:
+                        grad.div_(1+1/self.scaling_factor)
+                    state = self.state[p]
+                    if 'kf_d_t' not in state:
+                        state = dict()
+                        first_step = True
+                        state['kf_d_t'] = torch.zeros_like(p.data).to(p.data)
+                        state['kf_m_t'] = grad.clone().to(p.data)
+                    state['kf_m_t'].lerp_(grad, weight = kappa)
+                    if has_private_grad:
+                        p.private_grad = state['kf_m_t'].clone().to(p.data)
+                    else:
+                        p.grad = state['kf_m_t'].clone().to(p.data)
+                        scaling_factor += p.grad.norm().pow(2)
+                    state['kf_d_t'] = -p.data.clone().to(p.data)
+                    if first_step:
+                        tmp_states.append(state)
+            if scaling_factor > 0 and not has_private_grad:
+                scaling_factor = scaling_factor.sqrt()
                 for group in self.param_groups:
                     for p in group['params']:
                         if p.grad is not None:
-                            if first_step:
-                                tmp_state = tmp_states.pop(0)
-                                self.state[p]['kf_d_t'] = tmp_state['kf_d_t']
-                                self.state[p]['kf_m_t'] = tmp_state['kf_m_t']
-                                del tmp_state
-                            self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
+                            p.grad.div_(scaling_factor)
+            loss = self.original_optimizer.step(closure)
+            for group in self.param_groups:
+                for p in group['params']:
+                    if p.grad is not None:
+                        if first_step:
+                            tmp_state = tmp_states.pop(0)
+                            self.state[p]['kf_d_t'] = tmp_state['kf_d_t']
+                            self.state[p]['kf_m_t'] = tmp_state['kf_m_t']
+                            del tmp_state
+                        self.state[p]['kf_d_t'].add_(p.data, alpha = 1)
             return loss
         def __repr__(self):
             return self.original_optimizer.__repr__()

@@ -8,13 +8,11 @@ from fastDP import PrivacyEngine, PrivacyEngine_Distributed_extending
 import argparse
 import warnings
 import gc
-import os
 
 if __name__ == '__main__':
     warnings.filterwarnings("ignore")
-    os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
     torch.manual_seed(42)
-    parser = argparse.ArgumentParser(description='DiSK')
+    parser = argparse.ArgumentParser(description='LP DPSGD')
     parser = base_parse_args(parser)
     args = parser.parse_args()
     train_dl, test_dl, model, device, sample_size, acc_step, noise = task_init(args)
@@ -56,13 +54,13 @@ if __name__ == '__main__':
         lrscheduler = None
 
     if args.kf:
-        optimizer = wrap_optimizer(optimizer, kappa=args.kappa, gamma=args.gamma)#KFOptimizer(model.parameters(), optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
+        optimizer = wrap_optimizer(optimizer=optimizer, kappa=args.kappa, gamma=args.gamma)
     
     criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     if args.clipping:
-        privacy_engine = PrivacyEngine_Distributed_extending(model, noise_multiplier=noise, grad_accum_steps = acc_step, sample_size= sample_size, batch_size=args.bs, epochs= args.epoch, per_sample_clip=args.clipping, torch_seed_is_fixed=True, num_GPUs=1)
-        # privacy_engine = PrivacyEngine(model, noise_multiplier=noise, numerical_stability_constant=1e-3, grad_accum_steps = acc_step, sample_size= sample_size, batch_size=args.bs, epochs= args.epoch, per_sample_clip=args.clipping, torch_seed_is_fixed=False, clipping_fn=args.clipping_fn, clipping_style=args.clipping_style, max_grad_norm=args.clipping_norm)
-        # privacy_engine.attach(optimizer)
+        # privacy_engine = PrivacyEngine_Distributed_extending(model, noise_multiplier=noise, grad_accum_steps = acc_step, sample_size= sample_size, batch_size=args.bs, epochs= args.epoch, per_sample_clip=args.clipping, torch_seed_is_fixed=True, num_GPUs=1)
+        privacy_engine = PrivacyEngine(model, noise_multiplier=noise, numerical_stability_constant=1e-3, grad_accum_steps = acc_step, sample_size= sample_size, batch_size=args.bs, epochs= args.epoch, per_sample_clip=args.clipping, torch_seed_is_fixed=False, clipping_fn=args.clipping_fn, clipping_style=args.clipping_style, max_grad_norm=args.clipping_norm)
+        privacy_engine.attach(optimizer)
         
 
     if args.kf and args.load_path is not None:
