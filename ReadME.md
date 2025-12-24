@@ -1,4 +1,4 @@
-# Doppler+ (Kalman filter for DP optimizers)
+# DiSK (Simplified Kalman filter for DP optimizers)
 
 Key requirements:
 * deepspeed
